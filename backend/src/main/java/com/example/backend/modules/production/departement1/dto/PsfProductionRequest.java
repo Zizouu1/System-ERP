@@ -16,4 +16,7 @@ public class PsfProductionRequest {
     private double quantityPerBatch;
     private PsfStock.ProductType productType;
     private boolean producedByCutMachine;
+    private String operatorMatricule;
+    private java.time.LocalTime startTime;
+    private java.time.LocalTime endTime;
 }

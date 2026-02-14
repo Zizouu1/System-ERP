@@ -39,7 +39,16 @@ public class PsfProduction {
 
     private LocalDateTime timestamp;
 
+    private boolean producedByCutMachine;
+
     @ManyToOne
     @JoinColumn(name = "user_id")
     private User user;
+
+    private String operatorMatricule;
+    private java.time.LocalTime startTime;
+    private java.time.LocalTime endTime;
+    private Long rawTime;
+    private Long effectiveTime;
+    private Double performance;
 }

@@ -41,8 +41,6 @@ public class PsfStock {
 
     private boolean isInternal;
 
-    private boolean producedByCutMachine;
-
     @Transient
     public double getConsumedQuantity() {
         return totalQuantity - storeQuantity;
