@@ -1,0 +1,10 @@
+package com.example.backend.modules.production.shared.repository;
+
+import com.example.backend.modules.production.shared.entity.ProductionDetail;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface ProductionDetailRepository extends JpaRepository<ProductionDetail, Long> {
+    List<ProductionDetail> findByProductionRef(String productionRef);
+}

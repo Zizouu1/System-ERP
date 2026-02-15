@@ -9,6 +9,7 @@ import com.example.backend.modules.logistic.qr.QRCodeGenerator;
 import com.example.backend.modules.logistic.repository.IncomingMaterialRepository;
 import com.example.backend.modules.logistic.repository.OutgoingMaterialRepository;
 import com.example.backend.modules.logistic.repository.ProductStockRepository;
+import com.example.backend.modules.production.shared.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ public class LogisticService {
     private final OutgoingMaterialRepository outgoingRepository;
     private final ProductStockRepository stockRepository;
     private final QRCodeGenerator qrCodeGenerator;
+    private final ProductService productService;
 
     @Transactional
     public IncomingMaterial processIncoming(IncomingMaterialDTO incomingDTO) {
@@ -51,6 +53,14 @@ public class LogisticService {
         stock.setStoreQuantity(stock.getStoreQuantity() + incoming.getQuantity());
 
         stockRepository.save(stock);
+
+        // Sync with central product table
+        try {
+            productService.increaseQuantity(incoming.getReference(), incoming.getQuantity());
+        } catch (RuntimeException ignored) {
+            // Product may not exist in central table yet — skip silently
+        }
+
         return savedIncoming;
     }
 

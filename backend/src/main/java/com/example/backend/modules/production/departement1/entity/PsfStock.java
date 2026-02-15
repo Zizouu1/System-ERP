@@ -1,5 +1,6 @@
 package com.example.backend.modules.production.departement1.entity;
 
+import com.example.backend.modules.production.shared.entity.ProductType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -44,10 +45,5 @@ public class PsfStock {
     @Transient
     public double getConsumedQuantity() {
         return totalQuantity - storeQuantity;
-    }
-
-    public enum ProductType {
-        SFT,
-        SFP
     }
 }

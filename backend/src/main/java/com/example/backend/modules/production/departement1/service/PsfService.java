@@ -13,6 +13,8 @@ import com.google.zxing.qrcode.QRCodeWriter;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import com.example.backend.modules.production.shared.service.ProductService;
+import com.example.backend.modules.production.shared.entity.ProductType;
 import com.example.backend.modules.production.shared.util.ProductionTimeCalculator;
 
 import java.io.ByteArrayOutputStream;
@@ -30,6 +32,7 @@ public class PsfService {
     private final PsfIncomingRepository incomingRepository;
     private final PsfOutgoingRepository outgoingRepository;
     private final PsfProductionRepository productionRepository;
+    private final ProductService productService;
 
     @Transactional
     public String registerIncoming(PsfIncomingRequest request, User user) {
@@ -68,6 +71,12 @@ public class PsfService {
                 .user(user)
                 .build();
         incomingRepository.save(incoming);
+
+        // Sync with central product table
+        try {
+            productService.increaseQuantity(request.getReference(), request.getQuantity());
+        } catch (RuntimeException ignored) {
+        }
 
         // Generate QR Code
         // Format: référence$quantité$lot_number
@@ -187,6 +196,17 @@ public class PsfService {
         stock.setTotalQuantity(stock.getTotalQuantity() + request.getTotalProducedQuantity());
         stock.setStoreQuantity(stock.getStoreQuantity() + request.getTotalProducedQuantity());
         stockRepository.save(stock);
+
+        // BOM: read nomenclature, consume components, increase produced product, save
+        // ProductionDetails
+        try {
+            productService.declareProduction(
+                    request.getReference(),
+                    request.getTotalProducedQuantity(),
+                    "PSF-" + productionId);
+        } catch (RuntimeException ignored) {
+            // Product may not exist in central table yet
+        }
 
         List<String> qrCodes = new ArrayList<>();
         for (int i = 0; i < batches; i++) {
