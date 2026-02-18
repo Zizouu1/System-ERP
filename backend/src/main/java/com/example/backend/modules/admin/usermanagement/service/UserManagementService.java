@@ -7,6 +7,7 @@ import com.example.backend.modules.admin.usermanagement.repository.UserRepositor
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import com.example.backend.modules.admin.usermanagement.dto.UpdateUserRequest;
 
 @Service
 @RequiredArgsConstructor

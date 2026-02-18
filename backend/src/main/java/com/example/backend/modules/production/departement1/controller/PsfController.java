@@ -6,6 +6,7 @@ import com.example.backend.modules.production.departement1.dto.PsfOutgoingReques
 import com.example.backend.modules.production.departement1.dto.PsfProductionRequest;
 import com.example.backend.modules.production.departement1.service.PsfService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,11 +21,11 @@ public class PsfController {
 
     private final PsfService psfService;
 
-    @PostMapping("/incoming")
+    @PostMapping(value = "/incoming", produces = MediaType.IMAGE_PNG_VALUE)
     @PreAuthorize("hasAnyRole('PSF', 'ADMIN')")
-    public ResponseEntity<String> registerIncoming(@RequestBody PsfIncomingRequest request,
+    public ResponseEntity<byte[]> registerIncoming(@RequestBody PsfIncomingRequest request,
             @AuthenticationPrincipal User user) {
-        String qrCode = psfService.registerIncoming(request, user);
+        byte[] qrCode = psfService.registerIncoming(request, user);
         return ResponseEntity.ok(qrCode);
     }
 
@@ -36,11 +37,11 @@ public class PsfController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/production")
+    @PostMapping(value = "/production", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('PSF', 'ADMIN')")
-    public ResponseEntity<List<String>> declareProduction(@RequestBody PsfProductionRequest request,
+    public ResponseEntity<List<byte[]>> declareProduction(@RequestBody PsfProductionRequest request,
             @AuthenticationPrincipal User user) {
-        List<String> qrCodes = psfService.declareProduction(request, user);
+        List<byte[]> qrCodes = psfService.declareProduction(request, user);
         return ResponseEntity.ok(qrCodes);
     }
 

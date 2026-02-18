@@ -20,6 +20,12 @@ public class PfProductionService {
 
     @Transactional
     public PfProduction saveProduction(PfProductionRequest request) {
+        if (request.getStartTime() == null || request.getEndTime() == null) {
+            throw new IllegalArgumentException("Start time and end time are required.");
+        }
+        if (request.getQuantity() == null || request.getQuantity() <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero.");
+        }
         // 1. Calculate time metrics
         ProductionTimeCalculator.ProductionMetrics metrics = ProductionTimeCalculator.calculate(
                 request.getStartTime(),
@@ -39,17 +45,14 @@ public class PfProductionService {
                 .build();
 
         PfProduction saved = pfProductionRepository.save(production);
+        int netQuantity = request.getQuantity() - request.getScrapQuantity();
 
         // 3. Call ProductService: read BOM, consume components, increase produced
         // product, save ProductionDetails
-        try {
-            productService.declareProduction(
-                    request.getProductReference(),
-                    request.getQuantity(),
-                    "PF-" + saved.getId());
-        } catch (RuntimeException ignored) {
-            // Product may not exist in central table yet
-        }
+        productService.declareProduction(
+                request.getProductReference(),
+                netQuantity,
+                "PF-" + saved.getId());
 
         return saved;
     }

@@ -20,7 +20,6 @@ import com.example.backend.modules.production.shared.util.ProductionTimeCalculat
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,7 +34,7 @@ public class PsfService {
     private final ProductService productService;
 
     @Transactional
-    public String registerIncoming(PsfIncomingRequest request, User user) {
+    public byte[] registerIncoming(PsfIncomingRequest request, User user) {
         if (request.getQuantity() < 0) {
             throw new IllegalArgumentException("Quantity cannot be negative.");
         }
@@ -73,10 +72,7 @@ public class PsfService {
         incomingRepository.save(incoming);
 
         // Sync with central product table
-        try {
-            productService.increaseQuantity(request.getReference(), request.getQuantity());
-        } catch (RuntimeException ignored) {
-        }
+        productService.increaseQuantity(request.getReference(), request.getQuantity());
 
         // Generate QR Code
         // Format: référence$quantité$lot_number
@@ -118,7 +114,7 @@ public class PsfService {
     }
 
     @Transactional
-    public List<String> declareProduction(PsfProductionRequest request, User user) {
+    public List<byte[]> declareProduction(PsfProductionRequest request, User user) {
         if (request.getQuantityPerBatch() <= 0) {
             throw new IllegalArgumentException("Quantity per batch must be greater than zero.");
         }
@@ -193,28 +189,38 @@ public class PsfService {
                         .storeQuantity(0)
                         .build());
 
-        stock.setTotalQuantity(stock.getTotalQuantity() + request.getTotalProducedQuantity());
-        stock.setStoreQuantity(stock.getStoreQuantity() + request.getTotalProducedQuantity());
+        int netQuantity = request.getTotalProducedQuantity() - request.getScrapQuantity();
+        if (netQuantity < 0) {
+            throw new IllegalArgumentException("Scrap quantity cannot exceed total produced quantity.");
+        }
+
+        stock.setTotalQuantity(stock.getTotalQuantity() + netQuantity);
+        stock.setStoreQuantity(stock.getStoreQuantity() + netQuantity);
         stockRepository.save(stock);
 
         // BOM: read nomenclature, consume components, increase produced product, save
         // ProductionDetails
-        try {
-            productService.declareProduction(
-                    request.getReference(),
-                    request.getTotalProducedQuantity(),
-                    "PSF-" + productionId);
-        } catch (RuntimeException ignored) {
-            // Product may not exist in central table yet
+        productService.declareProduction(
+                request.getReference(),
+                netQuantity,
+                "PSF-" + productionId);
+
+        List<byte[]> qrCodes = new ArrayList<>();
+        int fullBatches = request.getTotalProducedQuantity() / request.getQuantityPerBatch();
+        int remainder = request.getTotalProducedQuantity() % request.getQuantityPerBatch();
+        int lastBatchQuantity = remainder - request.getScrapQuantity();
+        if (lastBatchQuantity < 0)
+            lastBatchQuantity = 0;
+
+        for (int i = 0; i < fullBatches; i++) {
+            qrCodes.add(generateQrCodeImage(
+                    request.getReference() + "$" + request.getQuantityPerBatch() + "$" + productionId + "$" + (i + 1)));
+        }
+        if (lastBatchQuantity > 0) {
+            qrCodes.add(generateQrCodeImage(
+                    request.getReference() + "$" + lastBatchQuantity + "$" + productionId + "$" + (fullBatches + 1)));
         }
 
-        List<String> qrCodes = new ArrayList<>();
-        for (int i = 0; i < batches; i++) {
-            // QR format: référence$quantitéParLot$productionId$i
-            String qrContent = request.getReference() + "$" + request.getQuantityPerBatch() + "$" + productionId + "$"
-                    + (i + 1);
-            qrCodes.add(generateQrCodeImage(qrContent));
-        }
         return qrCodes;
     }
 
@@ -230,14 +236,13 @@ public class PsfService {
         return outgoingRepository.findAll();
     }
 
-    private String generateQrCodeImage(String content) {
+    private byte[] generateQrCodeImage(String content) {
         try {
             QRCodeWriter qrCodeWriter = new QRCodeWriter();
             BitMatrix bitMatrix = qrCodeWriter.encode(content, BarcodeFormat.QR_CODE, 200, 200);
             ByteArrayOutputStream pngOutputStream = new ByteArrayOutputStream();
             MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
-            byte[] pngData = pngOutputStream.toByteArray();
-            return Base64.getEncoder().encodeToString(pngData);
+            return pngOutputStream.toByteArray();
         } catch (Exception e) {
             throw new RuntimeException("Error generating QR code", e);
         }

@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalTime;
 
 @Data
-@Builder
+@Builder.Default
 @NoArgsConstructor
 @AllArgsConstructor
 public class PfProductionRequest {
@@ -17,4 +17,6 @@ public class PfProductionRequest {
     private Integer quantity;
     private LocalTime startTime;
     private LocalTime endTime;
+    private int scrapQuantity = 0;
+
 }

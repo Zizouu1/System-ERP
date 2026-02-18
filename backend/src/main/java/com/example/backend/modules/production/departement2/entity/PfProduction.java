@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalTime;
 
 @Data
-@Builder
+@Builder.Default
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
@@ -34,6 +34,8 @@ public class PfProduction {
 
     @Column(nullable = false)
     private LocalTime endTime;
+
+    private int scrapQuantity = 0;
 
     // Calculated fields
     private Double performance;

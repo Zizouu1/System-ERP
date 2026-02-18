@@ -14,9 +14,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Data
-@Builder
+@Builder.Default
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
@@ -41,13 +42,13 @@ public class PsfProduction {
 
     private boolean producedByCutMachine;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id")
-    private User user;
+    private int scrapQuantity = 0;
 
+    @Column(nullable = false)
     private String operatorMatricule;
-    private java.time.LocalTime startTime;
-    private java.time.LocalTime endTime;
+
+    private LocalTime startTime;
+    private LocalTime endTime;
     private Long rawTime;
     private Long effectiveTime;
     private Double performance;

@@ -36,15 +36,11 @@ public class ProductController {
 
     @PostMapping("/produce")
     public ResponseEntity<List<ProductionDetail>> declareProduction(@RequestBody ProductionDeclarationRequest request) {
-        try {
-            List<ProductionDetail> details = productService.declareProduction(
-                    request.getProductRef(),
-                    request.getQuantity(),
-                    "DIRECT-" + System.currentTimeMillis());
-            return ResponseEntity.ok(details);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().build();
-        }
+        List<ProductionDetail> details = productService.declareProduction(
+                request.getProductRef(),
+                request.getQuantity(),
+                "DIRECT-" + System.currentTimeMillis());
+        return ResponseEntity.ok(details);
     }
 
     @GetMapping("/production-details/{productionRef}")

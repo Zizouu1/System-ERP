@@ -3,9 +3,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.time.LocalTime;
 
 @Data
-@Builder
+@Builder.Default
 @NoArgsConstructor
 @AllArgsConstructor
 public class PsfProductionRequest {
@@ -15,6 +16,7 @@ public class PsfProductionRequest {
     private ProductType productType;
     private boolean producedByCutMachine;
     private String operatorMatricule;
-    private java.time.LocalTime startTime;
-    private java.time.LocalTime endTime;
+    private LocalTime startTime;
+    private LocalTime endTime;
+    private int scrapQuantity = 0;
 }

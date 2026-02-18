@@ -29,6 +29,9 @@ public class LogisticService {
 
     @Transactional
     public IncomingMaterial processIncoming(IncomingMaterialDTO incomingDTO) {
+        if (incomingDTO.getQuantity() == null || incomingDTO.getQuantity() <= 0) {
+            throw new IllegalArgumentException("Incoming quantity must be greater than zero.");
+        }
         IncomingMaterial incoming = IncomingMaterial.builder()
                 .reference(incomingDTO.getReference())
                 .quantity(incomingDTO.getQuantity())
@@ -55,17 +58,16 @@ public class LogisticService {
         stockRepository.save(stock);
 
         // Sync with central product table
-        try {
-            productService.increaseQuantity(incoming.getReference(), incoming.getQuantity());
-        } catch (RuntimeException ignored) {
-            // Product may not exist in central table yet — skip silently
-        }
+        productService.increaseQuantity(incoming.getReference(), incoming.getQuantity());
 
         return savedIncoming;
     }
 
     @Transactional
     public OutgoingMaterial processOutgoing(OutgoingMaterialDTO outgoingDTO) {
+        if (outgoingDTO.getQuantityOut() == null || outgoingDTO.getQuantityOut() <= 0) {
+            throw new IllegalArgumentException("Outgoing quantity must be greater than zero.");
+        }
         // Check stock availability
         ProductStock stock = stockRepository.findByReference(outgoingDTO.getReference())
                 .orElseThrow(() -> new IllegalArgumentException(
