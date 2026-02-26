@@ -6,6 +6,7 @@ import com.example.backend.modules.production.departement2.service.PfProductionS
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -17,6 +18,7 @@ public class PfProductionController {
     private final PfProductionService pfProductionService;
 
     @PostMapping
+    @PreAuthorize("hasRole('PF')")
     public ResponseEntity<PfProduction> createProduction(@RequestBody PfProductionRequest request) {
         try {
             PfProduction savedProduction = pfProductionService.saveProduction(request);
@@ -26,7 +28,22 @@ public class PfProductionController {
         }
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PfProduction> updateProduction(@PathVariable Long id,
+            @RequestBody PfProductionRequest request) {
+        return ResponseEntity.ok(pfProductionService.updateProduction(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteProduction(@PathVariable Long id) {
+        pfProductionService.deleteProduction(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping
+    @PreAuthorize("hasAnyRole('PF', 'ADMIN')")
     public ResponseEntity<List<PfProduction>> getAllProductions() {
         return ResponseEntity.ok(pfProductionService.getAllProductions());
     }

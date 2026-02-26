@@ -5,18 +5,17 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalTime;
-
 @Data
-@Builder.Default
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class PfProductionRequest {
     private String operatorMatricule;
-    private String productReference;
+    private String reference;
     private Integer quantity;
-    private LocalTime startTime;
-    private LocalTime endTime;
+    private String startTime;
+    private String endTime;
+    @Builder.Default
     private int scrapQuantity = 0;
 
 }

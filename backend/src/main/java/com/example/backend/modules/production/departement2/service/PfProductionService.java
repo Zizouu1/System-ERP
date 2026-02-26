@@ -3,12 +3,13 @@ package com.example.backend.modules.production.departement2.service;
 import com.example.backend.modules.production.departement2.dto.PfProductionRequest;
 import com.example.backend.modules.production.departement2.entity.PfProduction;
 import com.example.backend.modules.production.departement2.repository.PfProductionRepository;
-import com.example.backend.modules.production.shared.service.ProductService;
-import com.example.backend.modules.production.shared.util.ProductionTimeCalculator;
+import com.example.backend.modules.production.productionstock.service.ProductService;
+import com.example.backend.modules.production.productionstock.util.ProductionTimeCalculator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalTime;
 import java.util.List;
 
 @Service
@@ -27,18 +28,22 @@ public class PfProductionService {
             throw new IllegalArgumentException("Quantity must be greater than zero.");
         }
         // 1. Calculate time metrics
+        LocalTime startTimeParsed = LocalTime.parse(request.getStartTime());
+        LocalTime endTimeParsed = LocalTime.parse(request.getEndTime());
+
         ProductionTimeCalculator.ProductionMetrics metrics = ProductionTimeCalculator.calculate(
-                request.getStartTime(),
-                request.getEndTime(),
-                request.getQuantity());
+                startTimeParsed,
+                endTimeParsed,
+                request.getQuantity().doubleValue());
 
         // 2. Save PfProduction record
         PfProduction production = PfProduction.builder()
                 .operatorMatricule(request.getOperatorMatricule())
-                .productReference(request.getProductReference())
+                .reference(request.getReference())
                 .quantity(request.getQuantity())
-                .startTime(request.getStartTime())
-                .endTime(request.getEndTime())
+                .scrapQuantity(request.getScrapQuantity())
+                .startTime(startTimeParsed)
+                .endTime(endTimeParsed)
                 .rawTime(metrics.rawTime())
                 .effectiveTime(metrics.effectiveTime())
                 .performance(metrics.performance())
@@ -50,7 +55,7 @@ public class PfProductionService {
         // 3. Call ProductService: read BOM, consume components, increase produced
         // product, save ProductionDetails
         productService.declareProduction(
-                request.getProductReference(),
+                request.getReference(),
                 netQuantity,
                 "PF-" + saved.getId());
 
@@ -63,5 +68,52 @@ public class PfProductionService {
 
     public PfProduction getProductionById(Long id) {
         return pfProductionRepository.findById(id).orElse(null);
+    }
+
+    @Transactional
+    public PfProduction updateProduction(Long id, PfProductionRequest request) {
+        PfProduction existing = pfProductionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Production not found"));
+
+        int oldNetQty = existing.getQuantity() - existing.getScrapQuantity();
+        productService.revertProduction(existing.getReference(), oldNetQty, "PF-" + existing.getId());
+
+        int newNetQty = request.getQuantity() - request.getScrapQuantity();
+        if (newNetQty < 0) {
+            throw new IllegalArgumentException("Scrap cannot exceed total quantity");
+        }
+
+        existing.setReference(request.getReference());
+        existing.setOperatorMatricule(request.getOperatorMatricule());
+        existing.setQuantity(request.getQuantity());
+        existing.setScrapQuantity(request.getScrapQuantity());
+
+        if (request.getStartTime() != null && request.getEndTime() != null) {
+            LocalTime start = LocalTime.parse(request.getStartTime());
+            LocalTime end = LocalTime.parse(request.getEndTime());
+            existing.setStartTime(start);
+            existing.setEndTime(end);
+
+            ProductionTimeCalculator.ProductionMetrics metrics = ProductionTimeCalculator.calculate(start, end,
+                    request.getQuantity().doubleValue());
+            existing.setRawTime(metrics.rawTime());
+            existing.setEffectiveTime(metrics.effectiveTime());
+            existing.setPerformance(metrics.performance());
+        }
+
+        productService.declareProduction(request.getReference(), newNetQty, "PF-" + existing.getId());
+
+        return pfProductionRepository.save(existing);
+    }
+
+    @Transactional
+    public void deleteProduction(Long id) {
+        PfProduction existing = pfProductionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Production not found"));
+
+        int oldNetQty = existing.getQuantity() - existing.getScrapQuantity();
+        productService.revertProduction(existing.getReference(), oldNetQty, "PF-" + existing.getId());
+
+        pfProductionRepository.delete(existing);
     }
 }

@@ -28,7 +28,16 @@ public class UserManagementController {
     @PostMapping("/register")
     public ResponseEntity<User> register(
             @RequestBody RegisterRequest request) {
-        return ResponseEntity.ok(service.register(request));
+        System.out.println("DEBUG: Registering user with role: " + request.getRole());
+        try {
+            User registered = service.register(request);
+            System.out.println("DEBUG: User registered successfully: " + registered.getUsername());
+            return ResponseEntity.ok(registered);
+        } catch (Exception e) {
+            System.err.println("DEBUG: Registration failed for role " + request.getRole() + ": " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
     }
 
     @GetMapping("/all")
@@ -50,5 +59,10 @@ public class UserManagementController {
     @PutMapping("/{id}")
     public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody UpdateUserRequest request) {
         return ResponseEntity.ok(service.updateUser(id, request));
+    }
+
+    @GetMapping("/matricule/{matricule}")
+    public ResponseEntity<User> getUserByMatricule(@PathVariable String matricule) {
+        return ResponseEntity.ok(service.getUserByMatricule(matricule));
     }
 }

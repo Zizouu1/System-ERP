@@ -17,14 +17,18 @@ public class UserManagementService {
     private final PasswordEncoder passwordEncoder;
 
     public User register(RegisterRequest request) {
+        System.out.println("DEBUG: Service: registering " + request.getUsername() + " with role " + request.getRole());
         var user = User.builder()
+                .Matricule(request.getMatricule())
                 .firstname(request.getFirstname())
                 .lastname(request.getLastname())
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
                 .build();
-        return repository.save(user);
+        User saved = repository.save(user);
+        System.out.println("DEBUG: Service: saved user id " + saved.getId());
+        return saved;
     }
 
     public User updateUser(Long id, UpdateUserRequest request) {
@@ -42,6 +46,11 @@ public class UserManagementService {
 
     public List<User> getAllUsers() {
         return repository.findAll();
+    }
+
+    public User getUserByMatricule(String Matricule) {
+        return repository.findByMatricule(Matricule)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
     public User getUserByUsername(String username) {

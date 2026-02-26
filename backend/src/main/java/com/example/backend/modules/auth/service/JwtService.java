@@ -28,7 +28,12 @@ public class JwtService {
     }
 
     public String generateToken(UserDetails userDetails) {
-        return generateToken(new HashMap<>(), userDetails);
+        Map<String, Object> extraClaims = new HashMap<>();
+        // Embed the first authority as "role" claim (e.g. "ROLE_ADMIN")
+        userDetails.getAuthorities().stream()
+                .findFirst()
+                .ifPresent(auth -> extraClaims.put("role", auth.getAuthority()));
+        return generateToken(extraClaims, userDetails);
     }
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
