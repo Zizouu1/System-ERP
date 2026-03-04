@@ -27,7 +27,15 @@ public class AuthService {
                 var user = repository.findByUsername(request.getUsername())
                                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-                var jwtToken = jwtService.generateToken(user);
+                var extraClaims = new java.util.HashMap<String, Object>();
+                extraClaims.put("firstname", user.getFirstname());
+                extraClaims.put("lastname", user.getLastname());
+
+                user.getAuthorities().stream()
+                                .findFirst()
+                                .ifPresent(auth -> extraClaims.put("role", auth.getAuthority()));
+
+                var jwtToken = jwtService.generateToken(extraClaims, user);
 
                 return AuthenticationResponse.builder()
                                 .token(jwtToken)
