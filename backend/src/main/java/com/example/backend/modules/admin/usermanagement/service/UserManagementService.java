@@ -19,7 +19,7 @@ public class UserManagementService {
     public User register(RegisterRequest request) {
         System.out.println("DEBUG: Service: registering " + request.getUsername() + " with role " + request.getRole());
         var user = User.builder()
-                .Matricule(request.getMatricule())
+                .matricule(request.getMatricule())
                 .firstname(request.getFirstname())
                 .lastname(request.getLastname())
                 .username(request.getUsername())
@@ -33,10 +33,25 @@ public class UserManagementService {
 
     public User updateUser(Long id, UpdateUserRequest request) {
         var user = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        user.setUsername(request.getUsername());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(request.getRole());
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
+        if (request.getUsername() != null && !request.getUsername().isBlank()) {
+            user.setUsername(request.getUsername());
+        }
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+        }
+        if (request.getRole() != null) {
+            user.setRole(request.getRole());
+        }
+        if (request.getMatricule() != null) {
+            user.setMatricule(request.getMatricule());
+        }
+        if (request.getFirstname() != null) {
+            user.setFirstname(request.getFirstname());
+        }
+        if (request.getLastname() != null) {
+            user.setLastname(request.getLastname());
+        }
         return repository.save(user);
     }
 
@@ -48,13 +63,13 @@ public class UserManagementService {
         return repository.findAll();
     }
 
-    public User getUserByMatricule(String Matricule) {
-        return repository.findByMatricule(Matricule)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    public User getUserByMatricule(String matricule) {
+        return repository.findByMatricule(matricule)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
     }
 
     public User getUserByUsername(String username) {
         return repository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
     }
 }

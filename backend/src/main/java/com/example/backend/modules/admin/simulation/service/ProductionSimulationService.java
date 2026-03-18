@@ -15,30 +15,46 @@ import java.util.*;
 @RequiredArgsConstructor
 public class ProductionSimulationService {
 
-    private final ProductRepository productRepository;
+    private final GlobalStockRepository globalStockRepository;
     private final NomenclatureRepository nomenclatureRepository;
 
     public SimulationResult simulate(List<SimulationRequest> requests) {
 
-        Map<Product, Double> totalRequired = new HashMap<>();
+        Map<String, Double> totalRequired = new HashMap<>();
 
-        // 🔁 Explode all selected products
-        for (SimulationRequest request : requests) {
-            Product product = productRepository.findById(request.getProductId())
-                    .orElseThrow(() -> new RuntimeException("Product not found"));
+        try {
+            // 🔁 Explode all selected products
+            for (SimulationRequest request : requests) {
+                String reference = request.getReference();
+                if (reference == null && request.getProductId() != null) {
+                    GlobalStock product = globalStockRepository.findById(request.getProductId())
+                            .orElseThrow(() -> new RuntimeException("Produit introuvable"));
+                    reference = product.getRef();
+                }
 
-            explode(product, request.getQuantity(), totalRequired);
+                if (reference == null) {
+                    throw new RuntimeException("Une référence doit être fournie pour la simulation");
+                }
+
+                explode(reference, request.getQuantity(), totalRequired);
+            }
+        } catch (RuntimeException e) {
+            // If any BOM is missing, we can return a failure immediately or gather all
+            // errors.
+            // For now, return immediate failure message.
+            return new SimulationResult(false, Collections.emptyList()); // Simplified for now
         }
 
         // 🔎 Compare with stock
         List<MissingItem> missingItems = new ArrayList<>();
 
-        for (Map.Entry<Product, Double> entry : totalRequired.entrySet()) {
+        for (Map.Entry<String, Double> entry : totalRequired.entrySet()) {
 
-            Product component = entry.getKey();
+            String ref = entry.getKey();
             Double requiredQty = entry.getValue();
 
-            Double availableQty = component.getQuantityAvailable();
+            GlobalStock stockItem = globalStockRepository.findByRef(ref).orElse(null);
+            Double availableQty = (stockItem != null) ? stockItem.getQuantityAvailable() : 0.0;
 
             if (requiredQty > availableQty) {
 
@@ -46,7 +62,7 @@ public class ProductionSimulationService {
 
                 missingItems.add(
                         new MissingItem(
-                                component.getRef(),
+                                ref,
                                 requiredQty,
                                 availableQty,
                                 missingQty));
@@ -59,25 +75,29 @@ public class ProductionSimulationService {
     }
 
     // 🔥 Recursive BOM Explosion
-    private void explode(Product product,
+    private void explode(String parentRef,
             Double quantity,
-            Map<Product, Double> totalRequired) {
+            Map<String, Double> totalRequired) {
 
-        List<Nomenclature> components = nomenclatureRepository.findByParentProduct(product);
+        List<Nomenclature> components = nomenclatureRepository.findByParentRef(parentRef);
 
-        // If no children → raw material
+        // If no children → check if it's a known product or missing BOM
         if (components.isEmpty()) {
-            totalRequired.merge(product, quantity, Double::sum);
+            boolean existsInBom = nomenclatureRepository.existsByParentRef(parentRef) ||
+                    nomenclatureRepository.existsByComponentRef(parentRef);
+            if (!existsInBom) {
+                throw new RuntimeException("Missing BOM definition for: " + parentRef);
+            }
+            totalRequired.merge(parentRef, quantity, Double::sum);
             return;
         }
 
         // If has children → explode each component
         for (Nomenclature bom : components) {
-
-            Product component = bom.getComponentProduct();
+            String componentRef = bom.getComponentRef();
             Double requiredQty = quantity * bom.getQuantityRequired();
 
-            explode(component, requiredQty, totalRequired);
+            explode(componentRef, requiredQty, totalRequired);
         }
     }
 }

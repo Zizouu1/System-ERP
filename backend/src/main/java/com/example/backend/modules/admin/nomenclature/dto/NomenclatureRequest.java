@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NomenclatureRequest {
-    private String parentProductRef;
-    private String componentProductRef;
+    private String parentRef;
+    private String componentRef;
     private Double quantityRequired;
 }

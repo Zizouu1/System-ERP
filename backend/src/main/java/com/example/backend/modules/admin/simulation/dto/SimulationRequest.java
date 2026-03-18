@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class SimulationRequest {
 
     private Long productId;
+    private String reference;
     private Double quantity;
 
 }

@@ -2,7 +2,7 @@ package com.example.backend.modules.auth.service;
 
 import com.example.backend.modules.auth.dto.AuthenticationRequest;
 import com.example.backend.modules.auth.dto.AuthenticationResponse;
-import com.example.backend.modules.admin.usermanagement.entity.User;
+// Removed unused import
 import com.example.backend.modules.admin.usermanagement.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -25,11 +25,12 @@ public class AuthService {
                                                 request.getPassword()));
 
                 var user = repository.findByUsername(request.getUsername())
-                                .orElseThrow(() -> new RuntimeException("User not found"));
+                                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
 
                 var extraClaims = new java.util.HashMap<String, Object>();
                 extraClaims.put("firstname", user.getFirstname());
                 extraClaims.put("lastname", user.getLastname());
+                extraClaims.put("matricule", user.getMatricule());
 
                 user.getAuthorities().stream()
                                 .findFirst()

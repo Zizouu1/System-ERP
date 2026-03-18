@@ -25,7 +25,7 @@ public class ProductionDetail {
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "component_product_id", nullable = false)
-    private Product componentProduct;
+    private GlobalStock componentProduct;
 
     @Column(nullable = false)
     private Double quantityConsumed;

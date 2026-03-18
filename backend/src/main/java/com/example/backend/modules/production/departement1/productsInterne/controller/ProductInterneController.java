@@ -1,6 +1,5 @@
 package com.example.backend.modules.production.departement1.productsInterne.controller;
 
-import com.example.backend.modules.admin.usermanagement.entity.User;
 import com.example.backend.modules.production.departement1.productsInterne.dto.PsfProductionRequest;
 import com.example.backend.modules.production.departement1.shared.entity.StockDep1;
 import com.example.backend.modules.production.departement1.productsInterne.service.ProductInterneService;
@@ -8,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,10 +20,15 @@ public class ProductInterneController {
 
     @PostMapping(value = "/production", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole('PSF')")
-    public ResponseEntity<List<byte[]>> declareProduction(@RequestBody PsfProductionRequest request,
-            @AuthenticationPrincipal User user) {
-        List<byte[]> qrCodes = psfService.declareProduction(request, user);
+    public ResponseEntity<List<byte[]>> declareProduction(@RequestBody PsfProductionRequest request) {
+        List<byte[]> qrCodes = psfService.declareProduction(request);
         return ResponseEntity.ok(qrCodes);
+    }
+
+    @GetMapping("/production")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getAllProductions() {
+        return ResponseEntity.ok(psfService.getAllProductions());
     }
 
     @PutMapping("/production/{id}")

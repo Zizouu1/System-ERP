@@ -62,7 +62,7 @@ public class ProductExterneController {
     }
 
     @GetMapping("/incoming")
-    @PreAuthorize("hasAnyRole('LOGISTIC', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN')")
     public ResponseEntity<List<IncomingMaterial>> getIncomingHistory() {
         return ResponseEntity.ok(productExterneService.getAllIncoming());
     }

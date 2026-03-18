@@ -1,7 +1,6 @@
 package com.example.backend.modules.admin.nomenclature.entity;
 
 import jakarta.persistence.*;
-import com.example.backend.modules.production.productionstock.entity.Product;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,13 +18,11 @@ public class Nomenclature {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "parent_product_id", nullable = false)
-    private Product parentProduct;
+    @Column(name = "parent_ref", nullable = false)
+    private String parentRef;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "component_product_id", nullable = false)
-    private Product componentProduct;
+    @Column(name = "component_ref", nullable = false)
+    private String componentRef;
 
     @Column(nullable = false)
     private Double quantityRequired;

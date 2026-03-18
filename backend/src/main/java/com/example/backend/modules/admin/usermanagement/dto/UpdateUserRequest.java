@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class UpdateUserRequest {
-    private String Matricule;
+    private String matricule;
     private String username;
     private String password;
     private String firstname;

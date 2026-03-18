@@ -2,11 +2,12 @@ package com.example.backend.modules.production.productionstock.service;
 
 import com.example.backend.modules.production.productionstock.dto.ProductRequest;
 import com.example.backend.modules.admin.nomenclature.entity.Nomenclature;
-import com.example.backend.modules.production.productionstock.entity.Product;
+import com.example.backend.modules.production.productionstock.entity.GlobalStock;
 import com.example.backend.modules.production.productionstock.entity.ProductionDetail;
-import com.example.backend.modules.production.productionstock.entity.ProductType;
+import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
 import com.example.backend.modules.admin.nomenclature.repository.NomenclatureRepository;
-import com.example.backend.modules.production.productionstock.repository.ProductRepository;
+import com.example.backend.modules.production.productionstock.repository.GlobalStockRepository;
+// Removed unused ProductRepository import
 import com.example.backend.modules.production.productionstock.repository.ProductionDetailRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -15,32 +16,60 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+// Removed unused Objects import
 
-@Service
+@Service("productionStockProductService")
 @RequiredArgsConstructor
 public class ProductService {
 
-    private final ProductRepository productRepository;
+    private final GlobalStockRepository globalStockRepository;
+    // Removed deprecated ProductRepository field
     private final NomenclatureRepository nomenclatureRepository;
     private final ProductionDetailRepository productionDetailRepository;
 
-    public Product createProduct(ProductRequest request) {
-        Product product = Product.builder()
-                .ref(request.getRef())
-                .type(request.getType())
-                .quantityTotal(0.0)
-                .quantityUsed(0.0)
-                .build();
-        return productRepository.save(product);
+    public GlobalStock createProduct(ProductRequest request) {
+    GlobalStock product = GlobalStock.builder()
+        .ref(request.getRef())
+        .type(request.getType()) // Ensure ProductRequest uses ProductTypeEnum
+        .quantityTotal(0.0)
+        .quantityUsed(0.0)
+        .build();
+    return globalStockRepository.save(product);
     }
 
-    public List<Product> getAllProducts() {
-        return productRepository.findAll();
+    public List<GlobalStock> getAllProducts() {
+        return globalStockRepository.findAll();
     }
 
-    public Product getProductByRef(String ref) {
-        return productRepository.findByRef(ref)
+    public GlobalStock getProductByRef(String ref) {
+        return globalStockRepository.findByRef(ref)
                 .orElseThrow(() -> new RuntimeException("Product not found: " + ref));
+    }
+
+    public void validateRef(String ref) {
+        boolean existsInBom = nomenclatureRepository.existsByParentRef(ref) ||
+                nomenclatureRepository.existsByComponentRef(ref);
+        if (!existsInBom) {
+            throw new RuntimeException(
+                    "Reference " + ref + " not found in Nomenclature (BOM) table. Operation denied.");
+        }
+    }
+
+    private GlobalStock getOrRegisterProduct(String ref) {
+    return getOrRegisterProduct(ref, ProductTypeEnum.MATIERE_PREMIERE);
+    }
+
+    private GlobalStock getOrRegisterProduct(String ref, ProductTypeEnum type) {
+        validateRef(ref);
+    return globalStockRepository.findByRef(ref).orElseGet(() -> {
+        GlobalStock newProduct = GlobalStock.builder()
+            .ref(ref)
+            .type(type)
+            .quantityTotal(0.0)
+            .quantityUsed(0.0)
+            .build();
+    return globalStockRepository.save(newProduct);
+    });
     }
 
     /**
@@ -49,40 +78,67 @@ public class ProductService {
      */
     @Transactional
     public void increaseQuantity(String ref, double amount) {
-        Product product = getProductByRef(ref);
+        increaseQuantity(ref, amount, ProductTypeEnum.MATIERE_PREMIERE);
+    }
+
+    /**
+     * Called by any module when products arrive (incoming).
+     * Increases quantityTotal → quantityAvailable goes up.
+     */
+    @Transactional
+    public void increaseQuantity(String ref, double amount, ProductTypeEnum type) {
+        GlobalStock product = getOrRegisterProduct(ref, type);
+        // Update type if product exists and type differs (can be upgraded from MATIERE_PREMIERE to others)
+        if (product.getType() != type && product.getType() == ProductTypeEnum.MATIERE_PREMIERE) {
+            product.setType(type);
+        }
         product.setQuantityTotal(product.getQuantityTotal() + amount);
-        productRepository.save(product);
+        globalStockRepository.save(product);
     }
 
     /**
      * Full production declaration with BOM:
-     * 1. Read BOM for the product
+     * 1. Check if parent ref is in Nomenclature
      * 2. For each component: increase quantityUsed (decrease available)
      * 3. For produced product: increase quantityTotal (increase available)
-     * 4. Save ProductionDetail for each consumed component
-     *
-     * @param reference     reference of the product being produced
-     * @param quantity      how many units produced
-     * @param productionRef unique ID linking details to the production record
-     * @return list of ProductionDetail records saved
      */
     @Transactional
     public List<ProductionDetail> declareProduction(String reference, double quantity, String productionRef) {
-        Product parentProduct = getProductByRef(reference);
+        return declareProduction(reference, quantity, productionRef, ProductTypeEnum.MATIERE_PREMIERE);
+    }
 
-        // 1. Read BOM
-        List<Nomenclature> bom = nomenclatureRepository.findByParentProduct(parentProduct);
+    /**
+     * Full production declaration with BOM:
+     * 1. Check if parent ref is in Nomenclature
+     * 2. For each component: increase quantityUsed (decrease available)
+     * 3. For produced product: increase quantityTotal (increase available)
+     */
+    @Transactional
+    public List<ProductionDetail> declareProduction(String reference, double quantity, String productionRef, ProductTypeEnum productType) {
+        validateRef(reference);
+        GlobalStock parentProduct = getOrRegisterProduct(reference, productType);
+        // Update type if product exists and type differs (can be upgraded from MATIERE_PREMIERE to others)
+        if (parentProduct.getType() != productType && parentProduct.getType() == ProductTypeEnum.MATIERE_PREMIERE) {
+            parentProduct.setType(productType);
+        }
+
+        // 1. Read BOM (as Strings)
+        List<Nomenclature> bom = nomenclatureRepository.findByParentRef(reference);
+
+        if (bom.isEmpty()) {
+            throw new RuntimeException("No BOM defined for product: " + reference);
+        }
 
         List<ProductionDetail> details = new ArrayList<>();
 
         // 2. Consume components
         for (Nomenclature entry : bom) {
-            Product component = entry.getComponentProduct();
+            GlobalStock component = getOrRegisterProduct(entry.getComponentRef());
             double consumed = entry.getQuantityRequired() * quantity;
 
             // Decrease component availability
             component.setQuantityUsed(component.getQuantityUsed() + consumed);
-            productRepository.save(component);
+            globalStockRepository.save(component);
 
             // 4. Save ProductionDetail
             ProductionDetail detail = ProductionDetail.builder()
@@ -96,7 +152,7 @@ public class ProductService {
 
         // 3. Increase produced product
         parentProduct.setQuantityTotal(parentProduct.getQuantityTotal() + quantity);
-        productRepository.save(parentProduct);
+        globalStockRepository.save(parentProduct);
 
         return details;
     }
@@ -105,10 +161,10 @@ public class ProductService {
         return productionDetailRepository.findByProductionRef(productionRef);
     }
 
-    public List<Product> getProducibleProducts(ProductType type) {
-        List<Product> productsByType = productRepository.findByType(type);
+    public List<GlobalStock> getProducibleProducts(ProductTypeEnum type) {
+        List<GlobalStock> productsByType = globalStockRepository.findByType(type);
         return productsByType.stream()
-                .filter(p -> !nomenclatureRepository.findByParentProduct(p).isEmpty())
+                .filter(p -> nomenclatureRepository.existsByParentRef(p.getRef()))
                 .toList();
     }
 
@@ -120,17 +176,17 @@ public class ProductService {
      */
     @Transactional
     public void revertProduction(String reference, double quantity, String productionRef) {
-        Product parentProduct = getProductByRef(reference);
+        GlobalStock parentProduct = getProductByRef(reference);
 
         List<ProductionDetail> details = productionDetailRepository.findByProductionRef(productionRef);
         for (ProductionDetail detail : details) {
-            Product component = detail.getComponentProduct();
+            GlobalStock component = detail.getComponentProduct();
             component.setQuantityUsed(component.getQuantityUsed() - detail.getQuantityConsumed());
-            productRepository.save(component);
+            globalStockRepository.save(component);
             productionDetailRepository.delete(detail);
         }
 
         parentProduct.setQuantityTotal(parentProduct.getQuantityTotal() - quantity);
-        productRepository.save(parentProduct);
+        globalStockRepository.save(parentProduct);
     }
 }

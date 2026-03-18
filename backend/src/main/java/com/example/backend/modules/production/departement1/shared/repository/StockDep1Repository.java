@@ -14,5 +14,7 @@ public interface StockDep1Repository extends JpaRepository<StockDep1, Long> {
 
     Optional<StockDep1> findByReferenceAndSource(String reference, StockSource source);
 
+    List<StockDep1> findByReferenceAndSourceAndLotNumberStartingWith(String reference, StockSource source, String lotPrefix);
+
     List<StockDep1> findBySource(StockSource source);
 }

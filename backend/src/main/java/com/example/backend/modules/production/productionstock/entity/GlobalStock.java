@@ -1,18 +1,24 @@
 package com.example.backend.modules.production.productionstock.entity;
 
 import jakarta.persistence.*;
+import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Global Stock Entity
+ * Tracks quantities and stock levels for products across the system.
+ * (Previously called Product - renamed to clarify its purpose as inventory tracking)
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "product")
-public class Product {
+@Table(name = "global_stock")
+public class GlobalStock {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,7 +29,7 @@ public class Product {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ProductType type;
+    private ProductTypeEnum type;
 
     @Column(nullable = false)
     @Builder.Default

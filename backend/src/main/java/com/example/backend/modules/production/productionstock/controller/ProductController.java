@@ -2,8 +2,8 @@ package com.example.backend.modules.production.productionstock.controller;
 
 import com.example.backend.modules.production.productionstock.dto.ProductRequest;
 import com.example.backend.modules.production.productionstock.dto.ProductionDeclarationRequest;
-import com.example.backend.modules.production.productionstock.entity.Product;
-import com.example.backend.modules.production.productionstock.entity.ProductType;
+import com.example.backend.modules.production.productionstock.entity.GlobalStock;
+import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
 import com.example.backend.modules.production.productionstock.entity.ProductionDetail;
 import com.example.backend.modules.production.productionstock.service.ProductService;
 import lombok.RequiredArgsConstructor;
@@ -13,8 +13,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
-@RestController
-@RequestMapping("/api/products")
+@RestController("productionStockProductController")
+@RequestMapping("/api/production-stock/products")
 @RequiredArgsConstructor
 public class ProductController {
 
@@ -22,19 +22,19 @@ public class ProductController {
 
     @PostMapping
     @PreAuthorize("denyAll()") // "ADMIN cannot create directly from this table"
-    public ResponseEntity<Product> createProduct(@RequestBody ProductRequest request) {
+    public ResponseEntity<GlobalStock> createProduct(@RequestBody ProductRequest request) {
         return ResponseEntity.ok(productService.createProduct(request));
     }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<Product>> getAllProducts() {
+    public ResponseEntity<List<GlobalStock>> getAllProducts() {
         return ResponseEntity.ok(productService.getAllProducts());
     }
 
     @GetMapping("/{ref}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Product> getProductByRef(@PathVariable String ref) {
+    public ResponseEntity<GlobalStock> getProductByRef(@PathVariable String ref) {
         return ResponseEntity.ok(productService.getProductByRef(ref));
     }
 
@@ -56,7 +56,7 @@ public class ProductController {
 
     @GetMapping("/producible")
     @PreAuthorize("hasAnyRole('ADMIN', 'PF', 'PSF')")
-    public ResponseEntity<List<Product>> getProducibleProducts(@RequestParam ProductType type) {
+    public ResponseEntity<List<GlobalStock>> getProducibleProducts(@RequestParam ProductTypeEnum type) {
         return ResponseEntity.ok(productService.getProducibleProducts(type));
     }
 }

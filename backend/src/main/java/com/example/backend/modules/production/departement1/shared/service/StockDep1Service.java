@@ -3,7 +3,7 @@ package com.example.backend.modules.production.departement1.shared.service;
 import com.example.backend.modules.production.departement1.shared.entity.StockDep1;
 import com.example.backend.modules.production.departement1.shared.entity.StockSource;
 import com.example.backend.modules.production.departement1.shared.repository.StockDep1Repository;
-import com.example.backend.modules.production.productionstock.entity.ProductType;
+import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
 import com.example.backend.modules.production.productionstock.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,8 +26,11 @@ public class StockDep1Service {
     }
 
     @Transactional
-    public void addStock(String reference, String lotNumber, ProductType type, double quantity, StockSource source) {
+    public void addStock(String reference, String lotNumber, ProductTypeEnum type, double quantity, StockSource source) {
+        productService.validateRef(reference);
         StockDep1 stock;
+
+        // Find by reference and source (and lot if provided)
         if (lotNumber != null && !lotNumber.isEmpty()) {
             stock = stockDep1Repository.findByReferenceAndLotNumberAndSource(reference, lotNumber, source)
                     .orElse(StockDep1.builder()
@@ -39,7 +42,9 @@ public class StockDep1Service {
                             .storeQuantity(0.0)
                             .build());
         } else {
+            // Shared stock behavior: look for any entry with same ref and source
             stock = stockDep1Repository.findByReferenceAndSource(reference, source)
+                    .stream().findFirst()
                     .orElse(StockDep1.builder()
                             .reference(reference)
                             .lotNumber(null)
@@ -61,14 +66,18 @@ public class StockDep1Service {
         if (lotNumber != null && !lotNumber.isEmpty()) {
             stock = stockDep1Repository.findByReferenceAndLotNumberAndSource(reference, lotNumber, source)
                     .orElseThrow(() -> new IllegalArgumentException(
-                            "Stock not found for ref: " + reference + " lot: " + lotNumber));
+                            "Référence non trouvée dans le stock du Département 1: " + reference + " (Lot: " + lotNumber
+                                    + ")"));
         } else {
             stock = stockDep1Repository.findByReferenceAndSource(reference, source)
-                    .orElseThrow(() -> new IllegalArgumentException("Stock not found for ref: " + reference));
+                    .stream().findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Référence non trouvée dans le stock du Département 1: " + reference));
         }
 
         if (stock.getStoreQuantity() < quantity) {
-            throw new IllegalArgumentException("Insufficient stock for reference: " + reference);
+            throw new IllegalArgumentException("Quantité en magasin insuffisante pour la référence: " + reference
+                    + ". Disponible: " + stock.getStoreQuantity());
         }
 
         stock.setStoreQuantity(stock.getStoreQuantity() - quantity);
@@ -78,7 +87,7 @@ public class StockDep1Service {
     @Transactional
     public StockDep1 updateStock(Long id, StockDep1 updatedStock) {
         StockDep1 existing = stockDep1Repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Stock not found"));
+                .orElseThrow(() -> new IllegalArgumentException("Stock introuvable"));
 
         double diffTotal = updatedStock.getTotalQuantity() - existing.getTotalQuantity();
 
@@ -95,7 +104,7 @@ public class StockDep1Service {
     @Transactional
     public void deleteStock(Long id) {
         StockDep1 existing = stockDep1Repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Stock not found"));
+                .orElseThrow(() -> new IllegalArgumentException("Stock introuvable"));
         // Revert from main production stock
         productService.increaseQuantity(existing.getReference(), -existing.getTotalQuantity());
         stockDep1Repository.delete(existing);

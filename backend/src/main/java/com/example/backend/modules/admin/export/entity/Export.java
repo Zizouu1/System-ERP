@@ -1,6 +1,6 @@
 package com.example.backend.modules.admin.export.entity;
 
-import com.example.backend.modules.production.productionstock.entity.Product;
+import com.example.backend.modules.production.productionstock.entity.GlobalStock;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,7 +23,7 @@ public class Export {
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "product_id", nullable = false)
-    private Product product;
+    private GlobalStock product;
 
     @Column(nullable = false)
     private Double quantity;

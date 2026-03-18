@@ -1,6 +1,6 @@
 package com.example.backend.modules.production.departement1.shared.entity;
 
-import com.example.backend.modules.production.productionstock.entity.ProductType;
+import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,13 +34,11 @@ public class StockDep1 {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ProductType productType;
+    private ProductTypeEnum productType;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private StockSource source;
-
-    private Boolean isInternal;
 
     private Boolean producedByCutMachine;
 

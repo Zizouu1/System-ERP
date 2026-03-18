@@ -1,6 +1,6 @@
 package com.example.backend.modules.production.departement1.productsInterne.entity;
 
-import com.example.backend.modules.admin.usermanagement.entity.User;
+// Removed unused import
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

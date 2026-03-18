@@ -3,6 +3,7 @@ package com.example.backend.modules.production.departement2.service;
 import com.example.backend.modules.production.departement2.dto.PfProductionRequest;
 import com.example.backend.modules.production.departement2.entity.PfProduction;
 import com.example.backend.modules.production.departement2.repository.PfProductionRepository;
+import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
 import com.example.backend.modules.production.productionstock.service.ProductService;
 import com.example.backend.modules.production.productionstock.util.ProductionTimeCalculator;
 import jakarta.transaction.Transactional;
@@ -10,6 +11,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @Service
@@ -17,26 +21,42 @@ import java.util.List;
 public class PfProductionService {
 
     private final PfProductionRepository pfProductionRepository;
-    private final ProductService productService;
+    private final ProductService globalStockProductService;
+    private final com.example.backend.modules.admin.product.service.ProductService masterProductService;
+
+    @Transactional
+    /**
+     * Valide que la référence existe dans le Product master.
+     * Vérifie que le type de produit est 'produit fini' pour la production PF.
+     * Lance une exception si la référence n'existe pas ou si le type est incorrect.
+     */
+    private void validateProductReference(String ref) {
+        masterProductService.validateProductReference(ref);
+        var product = masterProductService.getProductByRef(ref);
+        if (!"produit fini".equalsIgnoreCase(product.getProductType().getDisplayName())) {
+            throw new IllegalArgumentException(
+                "Le produit '" + ref + "' doit être de type 'produit fini'.");
+        }
+    }
 
     @Transactional
     public PfProduction saveProduction(PfProductionRequest request) {
+        // Validation du produit
+        validateProductReference(request.getReference());
         if (request.getStartTime() == null || request.getEndTime() == null) {
-            throw new IllegalArgumentException("Start time and end time are required.");
+            throw new IllegalArgumentException("L'heure de début et de fin sont obligatoires.");
         }
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
-            throw new IllegalArgumentException("Quantity must be greater than zero.");
+            throw new IllegalArgumentException("La quantité doit être supérieure à zéro.");
         }
-        // 1. Calculate time metrics
-        LocalTime startTimeParsed = LocalTime.parse(request.getStartTime());
-        LocalTime endTimeParsed = LocalTime.parse(request.getEndTime());
+        LocalTime startTimeParsed = parseTime(request.getStartTime());
+        LocalTime endTimeParsed = parseTime(request.getEndTime());
 
         ProductionTimeCalculator.ProductionMetrics metrics = ProductionTimeCalculator.calculate(
                 startTimeParsed,
                 endTimeParsed,
                 request.getQuantity().doubleValue());
 
-        // 2. Save PfProduction record
         PfProduction production = PfProduction.builder()
                 .operatorMatricule(request.getOperatorMatricule())
                 .reference(request.getReference())
@@ -49,17 +69,34 @@ public class PfProductionService {
                 .performance(metrics.performance())
                 .build();
 
-        PfProduction saved = pfProductionRepository.save(production);
+    PfProduction saved = pfProductionRepository.save(production);
         int netQuantity = request.getQuantity() - request.getScrapQuantity();
 
-        // 3. Call ProductService: read BOM, consume components, increase produced
-        // product, save ProductionDetails
-        productService.declareProduction(
+        globalStockProductService.declareProduction(
                 request.getReference(),
                 netQuantity,
-                "PF-" + saved.getId());
+                "PF-" + saved.getId(),
+                ProductTypeEnum.PRODUIT_FINI);
 
         return saved;
+    }
+
+    private LocalTime parseTime(String timeStr) {
+        if (timeStr == null || timeStr.isEmpty())
+            return null;
+        try {
+            return OffsetDateTime.parse(timeStr).toLocalTime();
+        } catch (DateTimeParseException e) {
+            try {
+                return LocalTime.parse(timeStr);
+            } catch (DateTimeParseException e2) {
+                try {
+                    return LocalDateTime.parse(timeStr).toLocalTime();
+                } catch (DateTimeParseException e3) {
+                    throw new IllegalArgumentException("Invalid time format: " + timeStr);
+                }
+            }
+        }
     }
 
     public List<PfProduction> getAllProductions() {
@@ -67,20 +104,22 @@ public class PfProductionService {
     }
 
     public PfProduction getProductionById(Long id) {
-        return pfProductionRepository.findById(id).orElse(null);
+    return pfProductionRepository.findById(id).orElse(null);
     }
 
     @Transactional
     public PfProduction updateProduction(Long id, PfProductionRequest request) {
-        PfProduction existing = pfProductionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Production not found"));
+        // Validation du produit
+        validateProductReference(request.getReference());
+    PfProduction existing = pfProductionRepository.findById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Production non trouvée"));
 
         int oldNetQty = existing.getQuantity() - existing.getScrapQuantity();
-        productService.revertProduction(existing.getReference(), oldNetQty, "PF-" + existing.getId());
+        globalStockProductService.revertProduction(existing.getReference(), oldNetQty, "PF-" + existing.getId());
 
         int newNetQty = request.getQuantity() - request.getScrapQuantity();
         if (newNetQty < 0) {
-            throw new IllegalArgumentException("Scrap cannot exceed total quantity");
+            throw new IllegalArgumentException("La quantité de rebut ne peut pas dépasser la quantité totale.");
         }
 
         existing.setReference(request.getReference());
@@ -89,8 +128,8 @@ public class PfProductionService {
         existing.setScrapQuantity(request.getScrapQuantity());
 
         if (request.getStartTime() != null && request.getEndTime() != null) {
-            LocalTime start = LocalTime.parse(request.getStartTime());
-            LocalTime end = LocalTime.parse(request.getEndTime());
+            LocalTime start = parseTime(request.getStartTime());
+            LocalTime end = parseTime(request.getEndTime());
             existing.setStartTime(start);
             existing.setEndTime(end);
 
@@ -101,18 +140,18 @@ public class PfProductionService {
             existing.setPerformance(metrics.performance());
         }
 
-        productService.declareProduction(request.getReference(), newNetQty, "PF-" + existing.getId());
+        globalStockProductService.declareProduction(request.getReference(), newNetQty, "PF-" + existing.getId(), ProductTypeEnum.PRODUIT_FINI);
 
         return pfProductionRepository.save(existing);
     }
 
     @Transactional
     public void deleteProduction(Long id) {
-        PfProduction existing = pfProductionRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Production not found"));
+    PfProduction existing = pfProductionRepository.findById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Production introuvable"));
 
         int oldNetQty = existing.getQuantity() - existing.getScrapQuantity();
-        productService.revertProduction(existing.getReference(), oldNetQty, "PF-" + existing.getId());
+        globalStockProductService.revertProduction(existing.getReference(), oldNetQty, "PF-" + existing.getId());
 
         pfProductionRepository.delete(existing);
     }

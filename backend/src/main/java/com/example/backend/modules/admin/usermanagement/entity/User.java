@@ -14,13 +14,17 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "user")
+@Table(name = "users")
 public class User implements UserDetails {
+    @Override
+    public String getPassword() {
+        return password;
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private String Matricule;
+    private String matricule;
 
     private String firstname;
     private String lastname;
