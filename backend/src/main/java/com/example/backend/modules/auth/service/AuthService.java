@@ -2,7 +2,6 @@ package com.example.backend.modules.auth.service;
 
 import com.example.backend.modules.auth.dto.AuthenticationRequest;
 import com.example.backend.modules.auth.dto.AuthenticationResponse;
-// Removed unused import
 import com.example.backend.modules.admin.usermanagement.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;

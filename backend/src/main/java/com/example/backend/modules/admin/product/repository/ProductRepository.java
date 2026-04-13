@@ -11,6 +11,8 @@ import java.util.Optional;
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
     Optional<Product> findByRef(String ref);
+    
+    boolean existsByRef(String ref);
 
     List<Product> findByProductType(ProductTypeEnum productType);
 

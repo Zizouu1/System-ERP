@@ -1,0 +1,74 @@
+package com.example.backend.modules.production.departement1.psfProduction.controller;
+
+import com.example.backend.modules.production.departement1.psfProduction.dto.PsfProductionRequest;
+import com.example.backend.modules.production.departement1.psfProduction.dto.PsfQrLabelDTO;
+import com.example.backend.modules.production.departement1.psfProduction.dto.PsfProductionUpdateResponse;
+import com.example.backend.modules.production.departement1.shared.entity.StockDep1;
+import com.example.backend.modules.production.departement1.psfProduction.service.PsfProductionService;
+import com.example.backend.modules.admin.usermanagement.entity.User;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/psf/interne")
+@RequiredArgsConstructor
+public class PsfProductionController {
+
+    private final PsfProductionService psfService;
+
+    @PostMapping(value = "/production", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole('PSF')")
+    public ResponseEntity<List<PsfQrLabelDTO>> declareProduction(@RequestBody PsfProductionRequest request,
+            @AuthenticationPrincipal User user) {
+        List<PsfQrLabelDTO> qrCodes = psfService.declareProduction(request, user);
+        return ResponseEntity.ok(qrCodes);
+    }
+
+    @GetMapping("/production")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PSF')")
+    public ResponseEntity<?> getAllProductions(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(psfService.getProductionHistory(user));
+    }
+
+    @PutMapping("/production/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PSF')")
+    public ResponseEntity<PsfProductionUpdateResponse> updateProduction(@PathVariable Long id,
+            @RequestBody PsfProductionRequest request,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(psfService.updateProduction(id, request, user));
+    }
+
+    @DeleteMapping("/production/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteProduction(@PathVariable Long id,
+            @AuthenticationPrincipal User user) {
+        psfService.deleteProduction(id, user);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/stocks")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> getAllStocks() {
+        return ResponseEntity.ok(psfService.getAllStocks());
+    }
+
+    @PutMapping("/stocks/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateStock(@PathVariable Long id,
+            @RequestBody StockDep1 request) {
+        return ResponseEntity.ok(psfService.updateStock(id, request));
+    }
+
+    @DeleteMapping("/stocks/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteStock(@PathVariable Long id) {
+        psfService.deleteStock(id);
+        return ResponseEntity.noContent().build();
+    }
+}

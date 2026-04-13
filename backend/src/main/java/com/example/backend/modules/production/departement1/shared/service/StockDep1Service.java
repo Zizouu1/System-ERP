@@ -1,87 +1,86 @@
 package com.example.backend.modules.production.departement1.shared.service;
 
-import com.example.backend.modules.production.departement1.shared.entity.StockDep1;
-import com.example.backend.modules.production.departement1.shared.entity.StockSource;
-import com.example.backend.modules.production.departement1.shared.repository.StockDep1Repository;
+import com.example.backend.modules.admin.notification.service.AdminNotificationService;
 import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
-import com.example.backend.modules.production.productionstock.service.ProductService;
+import com.example.backend.modules.production.departement1.shared.entity.StockDep1;
+import com.example.backend.modules.production.departement1.shared.repository.StockDep1Repository;
+import com.example.backend.modules.production.productionstock.service.GlobalStockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class StockDep1Service {
 
     private final StockDep1Repository stockDep1Repository;
-    private final ProductService productService;
+    private final GlobalStockService productService;
+    private final AdminNotificationService adminNotificationService;
 
-    public List<StockDep1> getAllStockBySource(StockSource source) {
-        if (source == null) {
-            return stockDep1Repository.findAll();
-        }
-        return stockDep1Repository.findBySource(source);
+    public List<StockDep1> getAllStocks() {
+        return stockDep1Repository.findAll();
     }
 
     @Transactional
-    public void addStock(String reference, String lotNumber, ProductTypeEnum type, double quantity, StockSource source) {
+    public void addStock(String reference, String lotNumber, ProductTypeEnum type, double quantity) {
         productService.validateRef(reference);
-        StockDep1 stock;
-
-        // Find by reference and source (and lot if provided)
-        if (lotNumber != null && !lotNumber.isEmpty()) {
-            stock = stockDep1Repository.findByReferenceAndLotNumberAndSource(reference, lotNumber, source)
-                    .orElse(StockDep1.builder()
-                            .reference(reference)
-                            .lotNumber(lotNumber)
-                            .productType(type)
-                            .source(source)
-                            .totalQuantity(0.0)
-                            .storeQuantity(0.0)
-                            .build());
-        } else {
-            // Shared stock behavior: look for any entry with same ref and source
-            stock = stockDep1Repository.findByReferenceAndSource(reference, source)
-                    .stream().findFirst()
-                    .orElse(StockDep1.builder()
-                            .reference(reference)
-                            .lotNumber(null)
-                            .productType(type)
-                            .source(source)
-                            .totalQuantity(0.0)
-                            .storeQuantity(0.0)
-                            .build());
-        }
+    StockDep1 stock = stockDep1Repository.findFirstByReferenceOrderByIdAsc(reference)
+                .orElse(StockDep1.builder()
+                        .reference(reference)
+                        .productType(type)
+                        .totalQuantity(0.0)
+                        .storeQuantity(0.0)
+                        .build());
 
         stock.setTotalQuantity(stock.getTotalQuantity() + quantity);
         stock.setStoreQuantity(stock.getStoreQuantity() + quantity);
-        stockDep1Repository.save(stock);
+    StockDep1 saved = stockDep1Repository.save(stock);
+    notifyLowStock(saved);
     }
 
     @Transactional
-    public void deductStock(String reference, String lotNumber, double quantity, StockSource source) {
-        StockDep1 stock;
-        if (lotNumber != null && !lotNumber.isEmpty()) {
-            stock = stockDep1Repository.findByReferenceAndLotNumberAndSource(reference, lotNumber, source)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Référence non trouvée dans le stock du Département 1: " + reference + " (Lot: " + lotNumber
-                                    + ")"));
-        } else {
-            stock = stockDep1Repository.findByReferenceAndSource(reference, source)
-                    .stream().findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Référence non trouvée dans le stock du Département 1: " + reference));
-        }
-
+    public void deductStock(String reference, String lotNumber, double quantity) {
+        StockDep1 stock = findStock(reference, lotNumber);
         if (stock.getStoreQuantity() < quantity) {
             throw new IllegalArgumentException("Quantité en magasin insuffisante pour la référence: " + reference
                     + ". Disponible: " + stock.getStoreQuantity());
         }
+        if (stock.getTotalQuantity() < quantity) {
+            throw new IllegalArgumentException("Quantité totale insuffisante pour la référence: " + reference
+                    + ". Disponible: " + stock.getTotalQuantity());
+        }
 
         stock.setStoreQuantity(stock.getStoreQuantity() - quantity);
-        stockDep1Repository.save(stock);
+        stock.setTotalQuantity(stock.getTotalQuantity() - quantity);
+        saveOrDeleteIfEmpty(stock);
+    }
+
+    @Transactional
+    public void consumeStoreOnly(String reference, String lotNumber, double quantity) {
+        StockDep1 stock = findStock(reference, lotNumber);
+        if (stock.getStoreQuantity() < quantity) {
+            throw new IllegalArgumentException("Quantité en magasin insuffisante pour la référence: " + reference
+                    + ". Disponible: " + stock.getStoreQuantity());
+        }
+        stock.setStoreQuantity(stock.getStoreQuantity() - quantity);
+    StockDep1 saved = stockDep1Repository.save(stock);
+    notifyLowStock(saved);
+    }
+
+    @Transactional
+    public void restoreStoreOnly(String reference, String lotNumber, double quantity) {
+        StockDep1 stock = findStock(reference, lotNumber);
+        double targetStore = stock.getStoreQuantity() + quantity;
+        if (targetStore > stock.getTotalQuantity()) {
+            throw new IllegalArgumentException(
+                    "Restauration invalide: la quantité en magasin dépasserait la quantité totale.");
+        }
+        stock.setStoreQuantity(targetStore);
+    StockDep1 saved = stockDep1Repository.save(stock);
+    notifyLowStock(saved);
     }
 
     @Transactional
@@ -89,24 +88,54 @@ public class StockDep1Service {
         StockDep1 existing = stockDep1Repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Stock introuvable"));
 
-        double diffTotal = updatedStock.getTotalQuantity() - existing.getTotalQuantity();
+        if (updatedStock.getStoreQuantity() > updatedStock.getTotalQuantity()) {
+            throw new IllegalArgumentException("La quantité en magasin ne peut pas dépasser la quantité totale.");
+        }
+        if (updatedStock.getStoreQuantity() < 0 || updatedStock.getTotalQuantity() < 0) {
+            throw new IllegalArgumentException("Les quantités ne peuvent pas être négatives.");
+        }
 
+        double diffTotal = updatedStock.getTotalQuantity() - existing.getTotalQuantity();
         if (diffTotal != 0) {
-            productService.increaseQuantity(existing.getReference(), diffTotal);
+            productService.increaseQuantity(existing.getReference(), diffTotal, existing.getProductType());
         }
 
         existing.setTotalQuantity(updatedStock.getTotalQuantity());
         existing.setStoreQuantity(updatedStock.getStoreQuantity());
 
-        return stockDep1Repository.save(existing);
+    StockDep1 saved = stockDep1Repository.save(existing);
+    notifyLowStock(saved);
+    return saved;
     }
 
     @Transactional
     public void deleteStock(Long id) {
         StockDep1 existing = stockDep1Repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Stock introuvable"));
-        // Revert from main production stock
-        productService.increaseQuantity(existing.getReference(), -existing.getTotalQuantity());
+        productService.increaseQuantity(existing.getReference(), -existing.getTotalQuantity(), existing.getProductType());
         stockDep1Repository.delete(existing);
+    }
+
+    public Optional<StockDep1> findStockByReferenceAndLot(String reference, String lotNumber) {
+        return stockDep1Repository.findFirstByReferenceOrderByIdAsc(reference);
+    }
+
+    private StockDep1 findStock(String reference, String lotNumber) {
+        return stockDep1Repository.findFirstByReferenceOrderByIdAsc(reference)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Référence non trouvée dans le stock du Département 1: " + reference));
+    }
+
+    private void saveOrDeleteIfEmpty(StockDep1 stock) {
+        if (stock.getTotalQuantity() <= 0.000001 && stock.getStoreQuantity() <= 0.000001) {
+            stockDep1Repository.delete(stock);
+            return;
+        }
+        StockDep1 saved = stockDep1Repository.save(stock);
+        notifyLowStock(saved);
+    }
+
+    private void notifyLowStock(StockDep1 stock) {
+        // Stock notifications completely removed
     }
 }

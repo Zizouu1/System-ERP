@@ -1,11 +1,13 @@
 package com.example.backend.modules.production.departement2.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Data
@@ -43,5 +45,13 @@ public class PfProduction {
     private Long effectiveTime; // In minutes
     private Long rawTime; // In minutes
 
-    // PrePersist/PreUpdate or Service logic will handle calculations
+    @JsonIgnore
+    private String createdByUsername;
+
+    @Builder.Default
+    private Boolean modified = false;
+
+    private LocalDateTime lastModifiedAt;
+
+    private String lastModifiedBy;
 }

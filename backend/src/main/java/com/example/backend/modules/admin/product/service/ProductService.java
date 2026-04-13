@@ -46,28 +46,19 @@ public class ProductService {
                 .build();
 
         Product saved = productRepository.save(product);
-        if (saved == null) {
-            throw new IllegalStateException("Erreur lors de la sauvegarde du produit.");
-        }
         return mapToResponse(saved);
     }
 
     public ProductResponse getProductById(@NonNull Long id) {
-    Product product = productRepository.findById(id)
-        .orElseThrow(() -> new IllegalArgumentException("Produit non trouvé: " + id));
-    if (product == null) {
-        throw new IllegalStateException("Produit non trouvé: " + id);
-    }
-    return mapToResponse(product);
+        Product product = productRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Produit non trouvé: " + id));
+        return mapToResponse(product);
     }
 
     public ProductResponse getProductByRef(String ref) {
-    Product product = productRepository.findByRef(ref)
-        .orElseThrow(() -> new IllegalArgumentException("Produit non trouvé: " + ref));
-    if (product == null) {
-        throw new IllegalStateException("Produit non trouvé: " + ref);
-    }
-    return mapToResponse(product);
+        Product product = productRepository.findByRef(ref)
+            .orElseThrow(() -> new IllegalArgumentException("Produit non trouvé: " + ref));
+        return mapToResponse(product);
     }
 
     public Page<ProductResponse> getAllProductsPaged(Pageable pageable) {
@@ -136,14 +127,6 @@ public class ProductService {
      */
     public boolean refExists(String ref) {
         return productRepository.findByRef(ref).isPresent();
-    }
-
-    /**
-     * Get product details for validation
-     */
-    public Product getProductEntityByRef(String ref) {
-        return productRepository.findByRef(ref)
-                .orElse(null);
     }
 
     @Transactional

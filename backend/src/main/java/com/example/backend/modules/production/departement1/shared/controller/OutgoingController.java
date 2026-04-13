@@ -25,21 +25,24 @@ public class OutgoingController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> updateOutgoing(@PathVariable Long id, @RequestBody OutgoingDTO request) {
-        return ResponseEntity.ok(outgoingService.updateOutgoing(id, request));
+    @PreAuthorize("hasAnyRole('ADMIN', 'PSF', 'LOGISTIC')")
+    public ResponseEntity<?> updateOutgoing(@PathVariable Long id,
+            @RequestBody OutgoingDTO request,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(outgoingService.updateOutgoing(id, request, user));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteOutgoing(@PathVariable Long id) {
-        outgoingService.deleteOutgoing(id);
+    public ResponseEntity<Void> deleteOutgoing(@PathVariable Long id,
+            @AuthenticationPrincipal User user) {
+        outgoingService.deleteOutgoing(id, user);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'LOGISTIC')")
-    public ResponseEntity<?> getAllOutgoing() {
-        return ResponseEntity.ok(outgoingService.getAllOutgoing());
+    @PreAuthorize("hasAnyRole('ADMIN', 'LOGISTIC', 'PSF')")
+    public ResponseEntity<?> getAllOutgoing(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(outgoingService.getOutgoingHistory(user));
     }
 }

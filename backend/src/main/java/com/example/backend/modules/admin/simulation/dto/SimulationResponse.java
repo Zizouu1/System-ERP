@@ -14,6 +14,7 @@ import java.util.List;
 public class SimulationResponse {
     private boolean possible;  // Changed from 'feasible' to match frontend
     private List<MissingItem> missingItems;  // Structured list instead of plain message
+    private List<RequiredItem> requiredItems;
     private String message;  // Keep for backward compatibility
 
     @Data
@@ -25,5 +26,16 @@ public class SimulationResponse {
         private Double requiredQty;
         private Double availableQty;
         private Double missingQty;  // requiredQty - availableQty
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class RequiredItem {
+        private String reference;
+        private Double requiredQty;
+        private Double availableQty;
+        private Double missingQty;
     }
 }

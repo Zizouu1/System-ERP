@@ -10,7 +10,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @RestController
 @RequestMapping("/api/simulation")
 @RequiredArgsConstructor
-@CrossOrigin
 @PreAuthorize("hasRole('ADMIN')")
 public class SimulationController {
 

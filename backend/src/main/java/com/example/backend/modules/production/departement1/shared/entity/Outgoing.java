@@ -1,5 +1,6 @@
 package com.example.backend.modules.production.departement1.shared.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -33,4 +34,14 @@ public class Outgoing {
 
     @Column(length = 500)
     private String notes;
+
+    @JsonIgnore
+    private String createdByUsername;
+
+    @Builder.Default
+    private Boolean modified = false;
+
+    private LocalDateTime lastModifiedAt;
+
+    private String lastModifiedBy;
 }

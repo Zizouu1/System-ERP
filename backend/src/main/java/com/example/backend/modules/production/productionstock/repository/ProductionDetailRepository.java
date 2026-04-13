@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface ProductionDetailRepository extends JpaRepository<ProductionDetail, Long> {
     List<ProductionDetail> findByProductionRef(String productionRef);
+
+    boolean existsByComponentProductId(Long componentProductId);
 }

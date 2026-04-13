@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "stock_dep1", uniqueConstraints = {
-        @UniqueConstraint(columnNames = { "reference", "lotNumber", "source" })
+    @UniqueConstraint(columnNames = { "reference" })
 })
 @Data
 @Builder
@@ -24,8 +24,6 @@ public class StockDep1 {
     @Column(nullable = false)
     private String reference;
 
-    private String lotNumber;
-
     @Column(nullable = false)
     private Double totalQuantity;
 
@@ -35,12 +33,6 @@ public class StockDep1 {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ProductTypeEnum productType;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private StockSource source;
-
-    private Boolean producedByCutMachine;
 
     @Transient
     public double getConsumedQuantity() {
