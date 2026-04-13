@@ -45,12 +45,12 @@ def _extract_expected_feature_columns(model: Any) -> list[str]:
     return MODEL_FEATURE_COLUMNS
 
 
-def _resolve_risk(probability: float) -> Tuple[str, str]:
+def _resolve_risk_message(probability: float) -> str:
     if probability < 0.30:
-        return "LOW", "Low risk of production delay."
+        return "Le risque de retard de production est faible."
     if probability < 0.70:
-        return "MEDIUM", "Medium risk of production delay."
-    return "HIGH", "High risk of production delay."
+        return "Le risque de retard de production est moyen."
+    return "Le risque de retard de production est eleve."
 
 
 def _compute_pressure_floor(features: pd.DataFrame) -> float:
@@ -153,10 +153,9 @@ def predict_delay(
         probability = (0.55 * probability) + (0.45 * coherence_probability)
         probability = max(probability, _compute_pressure_floor(features))
         probability = max(0.0, min(1.0, probability))
-        risk_level, message = _resolve_risk(probability)
+        message = _resolve_risk_message(probability)
         return {
             "delay_probability": probability,
-            "risk_level": risk_level,
             "message": message,
         }, None
     except Exception as exc:  # pragma: no cover - defensive fallback

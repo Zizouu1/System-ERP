@@ -14,6 +14,5 @@ class DelayPredictionRequest(BaseModel):
 
 class DelayPredictionResponse(BaseModel):
     delay_probability: Optional[float] = Field(default=None, ge=0, le=1)
-    risk_level: Optional[str] = None
     message: Optional[str] = None
     error: Optional[str] = None
