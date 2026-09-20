@@ -26,6 +26,18 @@ public class SimulationResponse {
         private Double requiredQty;
         private Double availableQty;
         private Double missingQty;  // requiredQty - availableQty
+        private List<ProductContribution> productContributions;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ProductContribution {
+        private String productRef;
+        private String productDesignation;
+        private Double producedQty;
+        private Double requiredQty;
     }
 
     @Data

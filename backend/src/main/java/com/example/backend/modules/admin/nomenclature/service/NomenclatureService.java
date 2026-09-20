@@ -50,7 +50,7 @@ public class NomenclatureService {
 
     public Nomenclature updateNomenclature(Long id, Double quantityRequired) {
         Nomenclature nomenclature = nomenclatureRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Nomenclature not found: " + id));
+                .orElseThrow(() -> new RuntimeException("Nomenclature introuvable : " + id));
         nomenclature.setQuantityRequired(quantityRequired);
         return nomenclatureRepository.save(nomenclature);
     }

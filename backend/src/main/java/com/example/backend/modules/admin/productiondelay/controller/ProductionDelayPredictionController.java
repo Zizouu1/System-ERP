@@ -22,5 +22,6 @@ public class ProductionDelayPredictionController {
     ) {
         return ResponseEntity.ok(productionDelayPredictionService.predictDelay(request));
     }
+
 }
 

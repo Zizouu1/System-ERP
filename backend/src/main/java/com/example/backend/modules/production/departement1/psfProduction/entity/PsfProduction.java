@@ -1,31 +1,24 @@
 package com.example.backend.modules.production.departement1.psfProduction.entity;
 
-// Removed unused import
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.example.backend.modules.production.shared.entity.Production;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "psf_production")
-public class PsfProduction {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    private String reference;
-
-    private double quantity;
+public class PsfProduction extends Production {
 
     private double quantityPerBatch;
 
@@ -35,27 +28,7 @@ public class PsfProduction {
 
     private boolean producedByCutMachine;
 
-    private int scrapQuantity;
-
-    @Column(nullable = false)
-    private String operatorMatricule;
-
-    private LocalTime startTime;
-    private LocalTime endTime;
-    private Long rawTime;
-    private Long effectiveTime;
-    private Double performance;
-
-    @JsonIgnore
-    private String createdByUsername;
 
     @JsonIgnore
     private String stockProductionRef;
-
-    @Builder.Default
-    private Boolean modified = false;
-
-    private LocalDateTime lastModifiedAt;
-
-    private String lastModifiedBy;
 }

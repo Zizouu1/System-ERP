@@ -16,6 +16,5 @@ public class ProductResponse {
     private String designation;
     private ProductTypeEnum productType;
     private String displayType; // French display name
-    private String description;
     private Boolean active;
 }

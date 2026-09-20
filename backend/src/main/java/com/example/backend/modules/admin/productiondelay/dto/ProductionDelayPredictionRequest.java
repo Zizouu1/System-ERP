@@ -9,10 +9,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ProductionDelayPredictionRequest {
 
-    private Double duree;
-    private Double quantiteCommandee;
-    private Double machinesDisponibles;
-    private Double bomDepth;
-    private Double totalOperations;
-    private Double totalBomComponents;
+    private Integer duree;
+    private Integer quantiteCommandee;
+    private Integer machinesDisponibles;
+    private Integer bomDepth;
+    private Integer totalOperations;
+    private Integer totalBomComponents;
 }

@@ -1,5 +1,6 @@
 package com.example.backend.modules.admin.productiondelay.service;
 
+import com.example.backend.modules.admin.productiondelay.dto.ModelMetricsResponse;
 import com.example.backend.modules.admin.productiondelay.dto.ProductionDelayPredictionRequest;
 import com.example.backend.modules.admin.productiondelay.dto.ProductionDelayPredictionResponse;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,7 +23,7 @@ public class ProductionDelayPredictionService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    @Value("${ai.service.base-url:http://localhost:8001}")
+    @Value("${ai.service.base-url:http://localhost:8000}")
     private String aiServiceBaseUrl;
 
     public ProductionDelayPredictionResponse predictDelay(ProductionDelayPredictionRequest request) {
@@ -35,7 +36,7 @@ public class ProductionDelayPredictionService {
             return error("Tous les champs numeriques sont obligatoires.");
         }
 
-        Map<String, Double> payload = new HashMap<>();
+        Map<String, Integer> payload = new HashMap<>();
         payload.put("duration", request.getDuree());
         payload.put("quantity_order", request.getQuantiteCommandee());
         payload.put("machine_available", request.getMachinesDisponibles());
@@ -62,11 +63,33 @@ public class ProductionDelayPredictionService {
         }
     }
 
+    public ModelMetricsResponse fetchModelMetrics() {
+        try {
+            ResponseEntity<Map> aiResponse = restTemplate.getForEntity(
+                    resolveModelMetricsUrl(),
+                    Map.class
+            );
+
+            return parseMetricsResponse(aiResponse.getBody());
+        } catch (RestClientResponseException ex) {
+            return emptyMetrics();
+        } catch (RestClientException ex) {
+            return emptyMetrics();
+        }
+    }
+
     private String resolvePredictUrl() {
         if (aiServiceBaseUrl.endsWith("/")) {
             return aiServiceBaseUrl + "predict-delay";
         }
         return aiServiceBaseUrl + "/predict-delay";
+    }
+
+    private String resolveModelMetricsUrl() {
+        if (aiServiceBaseUrl.endsWith("/")) {
+            return aiServiceBaseUrl + "model-metrics";
+        }
+        return aiServiceBaseUrl + "/model-metrics";
     }
 
     private ProductionDelayPredictionResponse parseAiResponse(Map<?, ?> body) {
@@ -91,9 +114,24 @@ public class ProductionDelayPredictionService {
                 message = inferMessage(number.doubleValue());
             }
 
+            Map<?, ?> metrics = extractMetrics(body);
+            Double accuracy = getMetric(body, metrics, "accuracy");
+            Double precision = getMetric(body, metrics, "precision");
+            Double recall = getMetric(body, metrics, "recall");
+            Double f1 = getMetric(body, metrics, "f1");
+            Double rocAuc = getMetric(body, metrics, "roc_auc");
+            if (rocAuc == null) {
+                rocAuc = getMetric(body, metrics, "rocAuc");
+            }
+
             return ProductionDelayPredictionResponse.builder()
                     .delayProbability(number.doubleValue())
                     .message(message)
+                    .accuracy(accuracy)
+                    .precision(precision)
+                    .recall(recall)
+                    .f1(f1)
+                    .rocAuc(rocAuc)
                     .build();
         }
 
@@ -131,6 +169,39 @@ public class ProductionDelayPredictionService {
                 .build();
     }
 
+    private ModelMetricsResponse parseMetricsResponse(Map<?, ?> body) {
+        if (body == null) {
+            return emptyMetrics();
+        }
+
+        Double accuracy = toDouble(body.get("accuracy"));
+        Double precision = toDouble(body.get("precision"));
+        Double recall = toDouble(body.get("recall"));
+        Double f1 = toDouble(body.get("f1"));
+        Double rocAuc = toDouble(body.get("roc_auc"));
+        if (rocAuc == null) {
+            rocAuc = toDouble(body.get("rocAuc"));
+        }
+
+        return ModelMetricsResponse.builder()
+                .accuracy(accuracy)
+                .precision(precision)
+                .recall(recall)
+                .f1(f1)
+                .rocAuc(rocAuc)
+                .build();
+    }
+
+    private ModelMetricsResponse emptyMetrics() {
+        return ModelMetricsResponse.builder()
+                .accuracy(null)
+                .precision(null)
+                .recall(null)
+                .f1(null)
+                .rocAuc(null)
+                .build();
+    }
+
     private String asText(Object value) {
         if (value == null) {
             return null;
@@ -147,5 +218,38 @@ public class ProductionDelayPredictionService {
             return "Le risque de retard de production est moyen.";
         }
         return "Le risque de retard de production est eleve.";
+    }
+
+    private Map<?, ?> extractMetrics(Map<?, ?> body) {
+        Object metricsValue = body.get("metrics");
+        if (metricsValue instanceof Map<?, ?> metricsMap) {
+            return metricsMap;
+        }
+        return null;
+    }
+
+    private Double getMetric(Map<?, ?> body, Map<?, ?> metrics, String key) {
+        Double fromBody = toDouble(body.get(key));
+        if (fromBody != null) {
+            return fromBody;
+        }
+        if (metrics != null) {
+            return toDouble(metrics.get(key));
+        }
+        return null;
+    }
+
+    private Double toDouble(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Double.parseDouble(text);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 }

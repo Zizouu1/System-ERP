@@ -1,6 +1,5 @@
 package com.example.backend.modules.production.departement1.shared.service;
 
-import com.example.backend.modules.admin.notification.service.AdminNotificationService;
 import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
 import com.example.backend.modules.production.departement1.shared.entity.StockDep1;
 import com.example.backend.modules.production.departement1.shared.repository.StockDep1Repository;
@@ -18,7 +17,6 @@ public class StockDep1Service {
 
     private final StockDep1Repository stockDep1Repository;
     private final GlobalStockService productService;
-    private final AdminNotificationService adminNotificationService;
 
     public List<StockDep1> getAllStocks() {
         return stockDep1Repository.findAll();
@@ -37,8 +35,7 @@ public class StockDep1Service {
 
         stock.setTotalQuantity(stock.getTotalQuantity() + quantity);
         stock.setStoreQuantity(stock.getStoreQuantity() + quantity);
-    StockDep1 saved = stockDep1Repository.save(stock);
-    notifyLowStock(saved);
+        stockDep1Repository.save(stock);
     }
 
     @Transactional
@@ -66,8 +63,7 @@ public class StockDep1Service {
                     + ". Disponible: " + stock.getStoreQuantity());
         }
         stock.setStoreQuantity(stock.getStoreQuantity() - quantity);
-    StockDep1 saved = stockDep1Repository.save(stock);
-    notifyLowStock(saved);
+        stockDep1Repository.save(stock);
     }
 
     @Transactional
@@ -79,8 +75,7 @@ public class StockDep1Service {
                     "Restauration invalide: la quantité en magasin dépasserait la quantité totale.");
         }
         stock.setStoreQuantity(targetStore);
-    StockDep1 saved = stockDep1Repository.save(stock);
-    notifyLowStock(saved);
+        stockDep1Repository.save(stock);
     }
 
     @Transactional
@@ -103,9 +98,7 @@ public class StockDep1Service {
         existing.setTotalQuantity(updatedStock.getTotalQuantity());
         existing.setStoreQuantity(updatedStock.getStoreQuantity());
 
-    StockDep1 saved = stockDep1Repository.save(existing);
-    notifyLowStock(saved);
-    return saved;
+        return stockDep1Repository.save(existing);
     }
 
     @Transactional
@@ -131,11 +124,7 @@ public class StockDep1Service {
             stockDep1Repository.delete(stock);
             return;
         }
-        StockDep1 saved = stockDep1Repository.save(stock);
-        notifyLowStock(saved);
+        stockDep1Repository.save(stock);
     }
 
-    private void notifyLowStock(StockDep1 stock) {
-        // Stock notifications completely removed
-    }
 }

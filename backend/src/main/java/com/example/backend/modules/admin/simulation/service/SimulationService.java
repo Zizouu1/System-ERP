@@ -3,8 +3,11 @@ package com.example.backend.modules.admin.simulation.service;
 import com.example.backend.modules.admin.simulation.dto.SimulationRequest;
 import com.example.backend.modules.admin.simulation.dto.SimulationResponse;
 import com.example.backend.modules.admin.nomenclature.entity.Nomenclature;
-import com.example.backend.modules.production.productionstock.entity.GlobalStock;
 import com.example.backend.modules.admin.nomenclature.repository.NomenclatureRepository;
+import com.example.backend.modules.admin.product.entity.Product;
+import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
+import com.example.backend.modules.admin.product.repository.ProductRepository;
+import com.example.backend.modules.production.productionstock.entity.GlobalStock;
 import com.example.backend.modules.production.productionstock.repository.GlobalStockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -13,11 +16,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -31,39 +31,66 @@ public class SimulationService {
 
     private final GlobalStockRepository globalStockRepository;
     private final NomenclatureRepository nomenclatureRepository;
+    private final ProductRepository productRepository;
+
+    private static final Set<ProductTypeEnum> ALLOWED_TYPES = Set.of(
+        ProductTypeEnum.SEMI_FINI,
+        ProductTypeEnum.PRODUIT_FINI
+    );
 
     public SimulationResponse checkFeasibility(SimulationRequest request) {
+        return checkFeasibilityBatch(List.of(request));
+    }
+
+    public SimulationResponse checkFeasibilityBatch(List<SimulationRequest> requests) {
         logger.info("=== SIMULATION START ===");
-        logger.info("Input - ProductId: {}, Reference: {}, Quantity: {}", 
-                   request.getProductId(), request.getReference(), request.getQuantity());
+        logger.info("Input batch size: {}", requests == null ? 0 : requests.size());
 
-        if (request.getQuantity() == null || request.getQuantity() <= 0) {
-            throw new RuntimeException("Quantity must be greater than 0 for simulation.");
+        if (requests == null || requests.isEmpty()) {
+            throw new IllegalArgumentException("Aucun produit sélectionné pour la simulation.");
         }
 
-        String reference = request.getReference();
-        if (reference == null && request.getProductId() != null) {
-            GlobalStock product = globalStockRepository.findById(Objects.requireNonNull(request.getProductId()))
-                    .orElseThrow(() -> new RuntimeException("Product not found: " + request.getProductId()));
-            reference = product.getRef();
-            logger.info("Resolved productId {} to reference: {}", request.getProductId(), reference);
-        }
+    Map<String, Double> requirements = new HashMap<>();
+    Map<String, List<SimulationResponse.ProductContribution>> contributions = new HashMap<>();
+        for (SimulationRequest request : requests) {
+            if (request.getQuantity() == null || request.getQuantity() <= 0) {
+                throw new IllegalArgumentException("La quantité doit être supérieure à zéro pour la simulation.");
+            }
 
-        if (reference == null) {
-            throw new RuntimeException("Reference or Product ID must be provided for simulation.");
-        }
+            Product product = resolveProduct(request);
+            if (!ALLOWED_TYPES.contains(product.getProductType())) {
+                throw new IllegalArgumentException("Ce type de produit ne peut pas être simulé");
+            }
 
-        Map<String, Double> requirements = new HashMap<>();
-        try {
-            calculateRequirements(reference, request.getQuantity(), requirements, new LinkedList<>(), new HashSet<>());
-        } catch (RuntimeException e) {
-            logger.error("Error calculating requirements: {}", e.getMessage());
-            return SimulationResponse.builder()
-                    .possible(false)
-                    .message(e.getMessage())
-                    .missingItems(new ArrayList<>())
-                    .requiredItems(new ArrayList<>())
-                    .build();
+            String reference = product.getRef();
+            logger.info("Resolved product for simulation: {} ({})", reference, product.getProductType());
+
+            List<Nomenclature> components = nomenclatureRepository.findByParentRef(reference).stream()
+                    .sorted(Comparator.comparing(Nomenclature::getComponentRef)
+                            .thenComparing(Nomenclature::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                    .toList();
+
+            if (components.isEmpty()) {
+                throw new IllegalArgumentException("Ce produit n'a pas de nomenclature");
+            }
+
+            for (Nomenclature component : components) {
+                if (component.getQuantityRequired() == null || component.getQuantityRequired() <= 0) {
+                    throw new IllegalArgumentException(
+                            "Quantité de nomenclature invalide pour " + reference + " -> " + component.getComponentRef());
+                }
+
+                double neededQty = request.getQuantity() * component.getQuantityRequired();
+                requirements.merge(component.getComponentRef(), neededQty, Double::sum);
+                contributions
+                        .computeIfAbsent(component.getComponentRef(), key -> new ArrayList<>())
+                        .add(SimulationResponse.ProductContribution.builder()
+                                .productRef(product.getRef())
+                                .productDesignation(product.getDesignation())
+                .producedQty(request.getQuantity())
+                                .requiredQty(neededQty)
+                                .build());
+            }
         }
 
         Map<String, Double> orderedRequirements = new LinkedHashMap<>();
@@ -97,12 +124,13 @@ public class SimulationService {
 
             if (missing > 0) {
                 feasible = false;
-                missingItems.add(SimulationResponse.MissingItem.builder()
-                        .reference(ref)
-                        .requiredQty(required)
-                        .availableQty(available)
-                        .missingQty(missing)
-                        .build());
+        missingItems.add(SimulationResponse.MissingItem.builder()
+            .reference(ref)
+            .requiredQty(required)
+            .availableQty(available)
+            .missingQty(missing)
+            .productContributions(contributions.getOrDefault(ref, List.of()))
+            .build());
             }
         }
 
@@ -110,63 +138,63 @@ public class SimulationService {
         logger.info("Missing items: {}", missingItems);
         logger.info("=== SIMULATION END ===");
 
+    String shortageMessage = feasible
+        ? "All components are available in stock."
+        : buildShortageMessage(missingItems);
+
         return SimulationResponse.builder()
                 .possible(feasible)
                 .missingItems(missingItems)
                 .requiredItems(requiredItems)
-                .message(feasible ? "All components are available in stock." 
-                                  : "Insufficient stock for " + missingItems.size() + " components")
+                .message(shortageMessage)
                 .build();
     }
 
-    private void calculateRequirements(
-            String parentRef,
-            Double quantity,
-            Map<String, Double> requirements,
-            Deque<String> recursionPath,
-            Set<String> pathSet
-    ) {
-        logger.info("calculateRequirements() - parentRef: {}, quantity: {}", parentRef, quantity);
-
-        if (pathSet.contains(parentRef)) {
-            String cyclePath = String.join(" -> ", recursionPath) + " -> " + parentRef;
-            throw new RuntimeException("Cyclic BOM detected: " + cyclePath);
+    private Product resolveProduct(SimulationRequest request) {
+        if (request.getProductId() != null) {
+            return productRepository.findById(Objects.requireNonNull(request.getProductId()))
+                    .orElseThrow(() -> new IllegalArgumentException("Produit introuvable"));
         }
-
-        recursionPath.addLast(parentRef);
-        pathSet.add(parentRef);
-        
-        List<Nomenclature> components = nomenclatureRepository.findByParentRef(parentRef).stream()
-                .sorted(Comparator.comparing(Nomenclature::getComponentRef)
-                        .thenComparing(Nomenclature::getId, Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
-        logger.info("Found {} BOM entries for parentRef '{}'", components.size(), parentRef);
-        
-        for (Nomenclature n : components) {
-            logger.info("  BOM: {} -> {} (qty: {})", parentRef, n.getComponentRef(), n.getQuantityRequired());
+        if (request.getReference() != null && !request.getReference().trim().isEmpty()) {
+            return productRepository.findByRef(request.getReference().trim())
+                    .orElseThrow(() -> new IllegalArgumentException("Produit introuvable"));
         }
+        throw new IllegalArgumentException("Référence ou ID produit obligatoire pour la simulation.");
+    }
 
-        if (components.isEmpty()) {
-            Double accumulatedQty = requirements.getOrDefault(parentRef, 0.0) + quantity;
-            requirements.put(parentRef, accumulatedQty);
-            logger.info("Added leaf component {} with accumulated quantity: {}", parentRef, accumulatedQty);
-            recursionPath.removeLast();
-            pathSet.remove(parentRef);
-            return;
+    private String buildShortageMessage(List<SimulationResponse.MissingItem> missingItems) {
+        if (missingItems == null || missingItems.isEmpty()) {
+            return "All components are available in stock.";
         }
+        return missingItems.stream()
+                .map(item -> String.format(
+                        "Production impossible : le composant %s requiert %.2f, stock disponible %.2f. %s",
+                        item.getReference(),
+                        item.getRequiredQty() != null ? item.getRequiredQty() : 0.0,
+                        item.getAvailableQty() != null ? item.getAvailableQty() : 0.0,
+                        formatProductContributionMessage(item.getProductContributions())))
+                .reduce((first, second) -> first + " | " + second)
+                .orElse("Stock insuffisant pour certains composants");
+    }
 
-        for (Nomenclature n : components) {
-            if (n.getQuantityRequired() == null || n.getQuantityRequired() <= 0) {
-                throw new RuntimeException("Invalid BOM quantity for " + parentRef + " -> " + n.getComponentRef());
-            }
-
-            Double neededQty = quantity * n.getQuantityRequired();
-            logger.info("Recursing into component {} with qty {} * {} = {}", 
-                       n.getComponentRef(), quantity, n.getQuantityRequired(), neededQty);
-            calculateRequirements(n.getComponentRef(), neededQty, requirements, recursionPath, pathSet);
+    private String formatProductContributionMessage(List<SimulationResponse.ProductContribution> contributions) {
+        if (contributions == null || contributions.isEmpty()) {
+            return "Produits concernés : -";
         }
+    String list = contributions.stream()
+        .map(contribution -> String.format(
+            "%s (x%s) nécessite %.2f",
+            contribution.getProductRef(),
+            contribution.getProducedQty() != null ? trimTrailingZeros(contribution.getProducedQty()) : "-",
+            contribution.getRequiredQty() != null ? contribution.getRequiredQty() : 0.0))
+                .reduce((first, second) -> first + ", " + second)
+                .orElse("-");
+        return "Produits concernés : " + list;
+    }
 
-        recursionPath.removeLast();
-        pathSet.remove(parentRef);
+    private String trimTrailingZeros(Double value) {
+    if (value == null) return "-";
+    if (value % 1 == 0) return String.valueOf(value.intValue());
+    return String.format("%.2f", value);
     }
 }

@@ -8,6 +8,9 @@ import com.example.backend.modules.production.productionstock.entity.GlobalStock
 import com.example.backend.modules.admin.product.service.ProductService;
 import com.example.backend.modules.admin.nomenclature.repository.NomenclatureRepository;
 import com.example.backend.modules.production.productionstock.repository.GlobalStockRepository;
+import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
+import com.example.backend.modules.production.departement1.shared.entity.StockDep1;
+import com.example.backend.modules.production.departement1.shared.repository.StockDep1Repository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +27,7 @@ public class ExportService {
     private final GlobalStockRepository globalStockRepository;
     private final NomenclatureRepository nomenclatureRepository;
     private final ProductService masterProductService;
+    private final StockDep1Repository stockDep1Repository;
 
     public List<Export> getAllExports() {
         return exportRepository.findAllByOrderByExportDateDesc();
@@ -41,10 +45,13 @@ public class ExportService {
         GlobalStock product = globalStockRepository.findByRef(request.getReference())
                 .orElseThrow(() -> new EntityNotFoundException("Produit introuvable : " + request.getReference()));
 
+        if (product.getType() != ProductTypeEnum.PRODUIT_FINI) {
+            throw new IllegalArgumentException("L'exportation n'est autorisée que pour les produits finis.");
+        }
+
         // 1. Validate Availability (total - used >= requested)
         if (product.getQuantityAvailable() < request.getQuantity()) {
-            throw new IllegalArgumentException("Stock insuffisant pour le produit " + product.getRef() +
-                    ". Disponible : " + product.getQuantityAvailable() + ", Requis : " + request.getQuantity());
+            throw new IllegalArgumentException("Le stock ne peut pas être négatif");
         }
 
         // 2. Explode BOM Recursively and Update Component Stocks
@@ -85,8 +92,12 @@ public class ExportService {
                     .orElseThrow(() -> new EntityNotFoundException("Produit introuvable : " + request.getReference()));
         }
 
+        if (product.getType() != ProductTypeEnum.PRODUIT_FINI) {
+            throw new IllegalArgumentException("L'exportation n'est autorisée que pour les produits finis.");
+        }
+
         if (product.getQuantityAvailable() < request.getQuantity()) {
-            throw new IllegalArgumentException("Stock insuffisant pour le produit " + product.getRef());
+            throw new IllegalArgumentException("Le stock ne peut pas être négatif");
         }
 
         // 3. Apply new export
@@ -103,7 +114,7 @@ public class ExportService {
     @Transactional
     public void deleteExport(Long id) {
         Export export = exportRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Export not found: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Export introuvable : " + id));
 
         // Reverse stock changes
         recursiveBOMStockUpdate(export.getProduct().getRef(), export.getQuantity(), true);
@@ -136,21 +147,31 @@ public class ExportService {
 
             // Update Component Stock
             GlobalStock component = globalStockRepository.findByRef(componentRef)
-                    .orElseThrow(() -> new EntityNotFoundException("Component stock record missing: " + componentRef));
+            .orElseThrow(() -> new EntityNotFoundException("Stock du composant introuvable : " + componentRef));
+
+            StockDep1 stockDep1 = stockDep1Repository.findFirstByReferenceOrderByIdAsc(componentRef)
+                    .orElseThrow(() -> new EntityNotFoundException("Stock Dep1 manquant pour le composant: " + componentRef));
 
             // Rule: Decrease/Increase BOTH totalQuantity and usedQuantity
             if (isReversal) {
                 component.setQuantityTotal(component.getQuantityTotal() + requiredQuantity);
                 component.setQuantityUsed(component.getQuantityUsed() + requiredQuantity);
+                stockDep1.setTotalQuantity(stockDep1.getTotalQuantity() + requiredQuantity);
             } else {
-                if (component.getQuantityTotal() < requiredQuantity) {
-                    throw new IllegalArgumentException("Data integrity error: Component " + component.getRef() +
-                            " has insufficient total quantity during BOM explosion.");
+                if (component.getQuantityTotal() < requiredQuantity
+                        || component.getQuantityUsed() < requiredQuantity
+                        || component.getQuantityAvailable() < requiredQuantity) {
+                    throw new IllegalArgumentException("Le stock ne peut pas être négatif");
+                }
+                if (stockDep1.getTotalQuantity() < requiredQuantity) {
+                    throw new IllegalArgumentException("Le stock Dep1 ne peut pas être négatif pour: " + componentRef);
                 }
                 component.setQuantityTotal(component.getQuantityTotal() - requiredQuantity);
                 component.setQuantityUsed(component.getQuantityUsed() - requiredQuantity);
+                stockDep1.setTotalQuantity(stockDep1.getTotalQuantity() - requiredQuantity);
             }
             globalStockRepository.save(component);
+            stockDep1Repository.save(stockDep1);
         }
     }
 }

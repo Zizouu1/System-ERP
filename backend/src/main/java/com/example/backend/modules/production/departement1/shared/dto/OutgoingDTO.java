@@ -15,6 +15,5 @@ public class OutgoingDTO {
     private String reference;
     private String lotNumber;
     private Double quantityOut;
-    private String notes;
     private LocalDateTime operationDate;
 }

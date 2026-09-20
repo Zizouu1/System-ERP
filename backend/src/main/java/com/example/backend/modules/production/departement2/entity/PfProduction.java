@@ -1,57 +1,42 @@
 package com.example.backend.modules.production.departement2.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.example.backend.modules.production.shared.entity.Production;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@SuperBuilder
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "pf_production")
-public class PfProduction {
+public class PfProduction extends Production {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    protected PfProduction() {
+        super();
+    }
 
-    @Column(nullable = false)
-    private String operatorMatricule;
+    @Transient
+    @JsonProperty("startDateTime")
+    public LocalDateTime getStartDateTime() {
+        if (getStartTime() == null) {
+            return null;
+        }
+        LocalDateTime base = getCreatedAt() != null ? getCreatedAt() : getLastModifiedAt();
+        return base != null ? base.toLocalDate().atTime(getStartTime()) : null;
+    }
 
-    @Column(nullable = false)
-    private String reference;
-
-    @Column(nullable = false)
-    private Integer quantity;
-
-    @Column(nullable = false)
-    private LocalTime startTime;
-
-    @Column(nullable = false)
-    private LocalTime endTime;
-
-    @Builder.Default
-    private int scrapQuantity = 0;
-
-    // Calculated fields
-    private Double performance;
-    private Long effectiveTime; // In minutes
-    private Long rawTime; // In minutes
-
-    @JsonIgnore
-    private String createdByUsername;
-
-    @Builder.Default
-    private Boolean modified = false;
-
-    private LocalDateTime lastModifiedAt;
-
-    private String lastModifiedBy;
+    @Transient
+    @JsonProperty("endDateTime")
+    public LocalDateTime getEndDateTime() {
+        if (getEndTime() == null) {
+            return null;
+        }
+        LocalDateTime base = getCreatedAt() != null ? getCreatedAt() : getLastModifiedAt();
+        return base != null ? base.toLocalDate().atTime(getEndTime()) : null;
+    }
 }

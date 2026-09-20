@@ -41,7 +41,6 @@ public class ProductService {
                 .ref(request.getRef())
                 .designation(request.getDesignation())
                 .productType(request.getProductType())
-                .description(request.getDescription())
                 .active(request.getActive() != null ? request.getActive() : true)
                 .build();
 
@@ -105,7 +104,6 @@ public class ProductService {
         product.setRef(request.getRef());
         product.setDesignation(request.getDesignation());
         product.setProductType(request.getProductType());
-        product.setDescription(request.getDescription());
         if (request.getActive() != null) {
             product.setActive(request.getActive());
         }
@@ -147,9 +145,18 @@ public class ProductService {
                 String ref = row[0].trim();
                 String designation = row[1].trim();
                 String typeStr = row[2].trim().toUpperCase().replace(" ", "_").replace("-", "_");
-                String description = row.length > 3 ? row[3].trim() : "";
-                // Support both "true"/"false" and "oui"/"non"
-                String activeStr = row.length > 4 ? row[4].trim().toLowerCase() : "true";
+                // Backward compatible CSV parsing:
+                // - New format: ref,designation,type[,active]
+                // - Legacy format with an extra ignored 4th column before active
+                String activeStr = "true";
+                if (row.length > 4) {
+                    activeStr = row[4].trim().toLowerCase();
+                } else if (row.length > 3) {
+                    String fourth = row[3].trim().toLowerCase();
+                    if (isBooleanLike(fourth)) {
+                        activeStr = fourth;
+                    }
+                }
                 boolean active = activeStr.equals("true") || activeStr.equals("oui") || activeStr.equals("yes") || activeStr.equals("1");
 
                 if (ref.isEmpty() || designation.isEmpty()) {
@@ -175,14 +182,12 @@ public class ProductService {
                 if (product != null) {
                     product.setDesignation(designation);
                     product.setProductType(typeEnum);
-                    product.setDescription(description);
                     product.setActive(active);
                 } else {
                     product = Product.builder()
                             .ref(ref)
                             .designation(designation)
                             .productType(typeEnum)
-                            .description(description)
                             .active(active)
                             .build();
                 }
@@ -204,8 +209,18 @@ public class ProductService {
                 .designation(product.getDesignation())
                 .productType(product.getProductType())
                 .displayType(product.getProductType().getDisplayName())
-                .description(product.getDescription())
                 .active(product.getActive())
                 .build();
+    }
+
+    private boolean isBooleanLike(String value) {
+        return "true".equals(value)
+                || "false".equals(value)
+                || "oui".equals(value)
+                || "non".equals(value)
+                || "yes".equals(value)
+                || "no".equals(value)
+                || "1".equals(value)
+                || "0".equals(value);
     }
 }

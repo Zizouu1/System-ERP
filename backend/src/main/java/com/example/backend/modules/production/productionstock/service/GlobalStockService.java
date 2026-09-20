@@ -1,22 +1,17 @@
 package com.example.backend.modules.production.productionstock.service;
 
-import com.example.backend.modules.admin.notification.service.AdminNotificationService;
 import com.example.backend.modules.production.productionstock.dto.GlobalStockUpdateRequest;
 import com.example.backend.modules.admin.nomenclature.entity.Nomenclature;
 import com.example.backend.modules.production.productionstock.entity.GlobalStock;
-import com.example.backend.modules.production.productionstock.entity.ProductionDetail;
 import com.example.backend.modules.admin.product.entity.ProductTypeEnum;
 import com.example.backend.modules.admin.nomenclature.repository.NomenclatureRepository;
 import com.example.backend.modules.admin.product.repository.ProductRepository;
 import com.example.backend.modules.production.productionstock.repository.GlobalStockRepository;
 
-import com.example.backend.modules.production.productionstock.repository.ProductionDetailRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 
@@ -28,8 +23,6 @@ public class GlobalStockService {
     
     private final NomenclatureRepository nomenclatureRepository;
     private final ProductRepository productRepository;
-    private final ProductionDetailRepository productionDetailRepository;
-    private final AdminNotificationService adminNotificationService;
 
 
 
@@ -39,14 +32,14 @@ public class GlobalStockService {
 
     public GlobalStock getProductByRef(String ref) {
         return globalStockRepository.findByRef(ref)
-                .orElseThrow(() -> new RuntimeException("Product not found: " + ref));
+                .orElseThrow(() -> new RuntimeException("Produit introuvable : " + ref));
     }
 
     public void validateRef(String ref) {
         boolean existsInProduct = productRepository.existsByRef(ref);
         if (!existsInProduct) {
             throw new RuntimeException(
-                    "Reference " + ref + " not found in Product table. Operation denied.");
+                    "Référence produit introuvable : " + ref + ". Opération refusée.");
         }
     }
 
@@ -88,8 +81,7 @@ public class GlobalStockService {
             product.setType(type);
         }
         product.setQuantityTotal(product.getQuantityTotal() + amount);
-        GlobalStock saved = globalStockRepository.save(product);
-        notifyLowStock(saved);
+        globalStockRepository.save(product);
     }
 
     /**
@@ -99,8 +91,8 @@ public class GlobalStockService {
      * 3. For produced product: increase quantityTotal (increase available)
      */
     @Transactional
-    public List<ProductionDetail> declareProduction(String reference, double quantity, String productionRef) {
-        return declareProduction(reference, quantity, productionRef, ProductTypeEnum.MATIERE_PREMIERE);
+    public void declareProduction(String reference, double quantity, String productionRef) {
+        declareProduction(reference, quantity, productionRef, ProductTypeEnum.MATIERE_PREMIERE, false);
     }
 
     /**
@@ -110,7 +102,12 @@ public class GlobalStockService {
      * 3. For produced product: increase quantityTotal (increase available)
      */
     @Transactional
-    public List<ProductionDetail> declareProduction(String reference, double quantity, String productionRef, ProductTypeEnum productType) {
+    public void declareProduction(String reference, double quantity, String productionRef, ProductTypeEnum productType) {
+        declareProduction(reference, quantity, productionRef, productType, false);
+    }
+
+    @Transactional
+    public void declareProduction(String reference, double quantity, String productionRef, ProductTypeEnum productType, boolean isAdmin) {
         validateRef(reference);
         GlobalStock parentProduct = getOrRegisterProduct(reference, productType);
         // Update type if product exists and type differs (can be upgraded from MATIERE_PREMIERE to others)
@@ -122,41 +119,43 @@ public class GlobalStockService {
         List<Nomenclature> bom = nomenclatureRepository.findByParentRef(reference);
 
         if (bom.isEmpty()) {
-            throw new RuntimeException("No BOM defined for product: " + reference);
+            throw new RuntimeException("Aucune nomenclature définie pour le produit : " + reference);
         }
-
-        List<ProductionDetail> details = new ArrayList<>();
 
         // 2. Consume components
         for (Nomenclature entry : bom) {
             GlobalStock component = getOrRegisterProduct(entry.getComponentRef());
             double consumed = entry.getQuantityRequired() * quantity;
 
+            assertNonNegativeStock(component, consumed, isAdmin);
+
             // Decrease component availability
             component.setQuantityUsed(component.getQuantityUsed() + consumed);
-            GlobalStock savedComponent = globalStockRepository.save(component);
-            notifyLowStock(savedComponent);
+            globalStockRepository.save(component);
 
-            // 4. Save ProductionDetail
-            ProductionDetail detail = ProductionDetail.builder()
-                    .productionRef(productionRef)
-                    .componentProduct(component)
-                    .quantityConsumed(consumed)
-                    .timestamp(LocalDateTime.now())
-                    .build();
-            details.add(productionDetailRepository.save(detail));
         }
 
         // 3. Increase produced product
         parentProduct.setQuantityTotal(parentProduct.getQuantityTotal() + quantity);
-    GlobalStock savedParent = globalStockRepository.save(parentProduct);
-    notifyLowStock(savedParent);
+        globalStockRepository.save(parentProduct);
 
-        return details;
     }
 
-    public List<ProductionDetail> getProductionDetails(String productionRef) {
-        return productionDetailRepository.findByProductionRef(productionRef);
+    private void assertNonNegativeStock(GlobalStock component, double consumed, boolean isAdmin) {
+        if (component.getQuantityAvailable() < consumed) {
+            String message = isAdmin
+                    ? String.format(
+                            "Le stock ne peut pas être négatif pour %s (disponible %.2f, requis %.2f)",
+                            component.getRef(),
+                            component.getQuantityAvailable(),
+                            consumed)
+                    : String.format(
+                            "Stock insuffisant pour %s (disponible %.2f, requis %.2f)",
+                            component.getRef(),
+                            component.getQuantityAvailable(),
+                            consumed);
+            throw new IllegalArgumentException(message);
+        }
     }
 
     public List<GlobalStock> getProducibleProducts(ProductTypeEnum type) {
@@ -183,19 +182,13 @@ public class GlobalStockService {
 
         stock.setQuantityTotal(newTotal);
         stock.setQuantityUsed(newUsed);
-    GlobalStock saved = globalStockRepository.save(stock);
-    notifyLowStock(saved);
-    return saved;
+        return globalStockRepository.save(stock);
     }
 
     @Transactional
     public void deleteGlobalStock(Long id) {
         GlobalStock stock = globalStockRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Stock global introuvable."));
-        if (productionDetailRepository.existsByComponentProductId(id)) {
-            throw new IllegalArgumentException(
-                    "Impossible de supprimer cette ligne: elle est utilisée par un historique de production.");
-        }
         globalStockRepository.delete(stock);
     }
 
@@ -203,39 +196,21 @@ public class GlobalStockService {
      * Reverts a production declaration:
      * 1. Restores consumed components (decreases quantityUsed)
      * 2. Decreases produced product's quantityTotal
-     * 3. Removes ProductionDetail records
+    * 3. Recomputes component consumption from BOM
      */
     @Transactional
     public void revertProduction(String reference, double quantity, String productionRef) {
         GlobalStock parentProduct = getProductByRef(reference);
 
-        List<ProductionDetail> details = productionDetailRepository.findByProductionRef(productionRef);
-        if (details.isEmpty()) {
-            // Legacy safety: if detail rows are missing, fallback to BOM recomputation.
-            List<Nomenclature> bom = nomenclatureRepository.findByParentRef(reference);
-            for (Nomenclature entry : bom) {
-                GlobalStock component = getOrRegisterProduct(entry.getComponentRef());
-                double consumed = entry.getQuantityRequired() * quantity;
-                component.setQuantityUsed(component.getQuantityUsed() - consumed);
-                GlobalStock savedComponent = globalStockRepository.save(component);
-                notifyLowStock(savedComponent);
-            }
-        } else {
-            for (ProductionDetail detail : details) {
-                GlobalStock component = detail.getComponentProduct();
-                component.setQuantityUsed(component.getQuantityUsed() - detail.getQuantityConsumed());
-                GlobalStock savedComponent = globalStockRepository.save(component);
-                notifyLowStock(savedComponent);
-                productionDetailRepository.delete(detail);
-            }
+        List<Nomenclature> bom = nomenclatureRepository.findByParentRef(reference);
+        for (Nomenclature entry : bom) {
+            GlobalStock component = getOrRegisterProduct(entry.getComponentRef());
+            double consumed = entry.getQuantityRequired() * quantity;
+            component.setQuantityUsed(component.getQuantityUsed() - consumed);
+            globalStockRepository.save(component);
         }
 
         parentProduct.setQuantityTotal(parentProduct.getQuantityTotal() - quantity);
-        GlobalStock savedParent = globalStockRepository.save(parentProduct);
-        notifyLowStock(savedParent);
-    }
-
-    private void notifyLowStock(GlobalStock stock) {
-        // Stock notifications completely removed
+        globalStockRepository.save(parentProduct);
     }
 }

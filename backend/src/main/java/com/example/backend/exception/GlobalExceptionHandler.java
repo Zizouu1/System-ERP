@@ -21,7 +21,7 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse("Validation failed.");
+        .orElse("Données invalides.");
         return build(HttpStatus.BAD_REQUEST, message, request);
     }
 
@@ -30,7 +30,7 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException e,
             HttpServletRequest request
     ) {
-        return build(HttpStatus.BAD_REQUEST, "Malformed request body.", request);
+            return build(HttpStatus.BAD_REQUEST, "Requête invalide.", request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
             AccessDeniedException e,
             HttpServletRequest request
     ) {
-        return build(HttpStatus.FORBIDDEN, e.getMessage(), request);
+        return build(HttpStatus.FORBIDDEN, "Accès refusé.", request);
     }
 
     @ExceptionHandler(RuntimeException.class)
@@ -70,7 +70,7 @@ public class GlobalExceptionHandler {
             Exception e,
             HttpServletRequest request
     ) {
-        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error.", request);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Erreur interne du serveur.", request);
     }
 
     private ResponseEntity<ApiErrorResponse> build(HttpStatus status, String message, HttpServletRequest request) {

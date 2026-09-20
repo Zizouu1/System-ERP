@@ -35,7 +35,7 @@ public class StockDep1 {
     private ProductTypeEnum productType;
 
     @Transient
-    public double getConsumedQuantity() {
+    public double getTransferedQuantity() {
         return totalQuantity != null && storeQuantity != null ? totalQuantity - storeQuantity : 0.0;
     }
 

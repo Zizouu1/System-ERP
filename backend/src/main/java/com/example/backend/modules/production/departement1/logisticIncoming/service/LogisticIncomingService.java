@@ -59,8 +59,6 @@ public class LogisticIncomingService {
                 .quantity(request.getQuantity())
                 .lotNumber(requestedLotNumber != null ? requestedLotNumber : "TEMP")
                 .operationDate(request.getOperationDate() != null ? request.getOperationDate() : LocalDateTime.now())
-                .operatorMatricule(request.getOperatorMatricule())
-                .notes(request.getNotes())
                 .createdByUsername(user.getUsername())
                 .build();
 
@@ -96,10 +94,7 @@ public class LogisticIncomingService {
         }
 
         List<IncomingMaterial> own = incomingRepository.findByCreatedByUsernameOrderByIdDesc(user.getUsername());
-        if (!own.isEmpty() || user.getMatricule() == null) {
-            return own;
-        }
-        return incomingRepository.findByOperatorMatriculeOrderByIdDesc(user.getMatricule());
+        return own;
     }
 
     public List<StockDep1> getAllStocks() {
@@ -114,7 +109,7 @@ public class LogisticIncomingService {
         operationAuthorizationService.assertCanUpdateOperation(
                 user,
                 existing.getCreatedByUsername(),
-                existing.getOperatorMatricule());
+        null);
 
         String nextReference = request.getReference() != null ? request.getReference() : existing.getReference();
         String nextLotNumber = (request.getLotNumber() != null && !request.getLotNumber().isBlank())
@@ -143,14 +138,9 @@ public class LogisticIncomingService {
         existing.setReference(nextReference);
         existing.setQuantity(nextQuantity);
         existing.setLotNumber(nextLotNumber);
-        existing.setOperatorMatricule(
-                request.getOperatorMatricule() != null ? request.getOperatorMatricule() : existing.getOperatorMatricule());
-        existing.setNotes(request.getNotes());
         if (request.getOperationDate() != null) {
             existing.setOperationDate(request.getOperationDate());
         }
-        existing.setModified(true);
-        existing.setLastModifiedAt(LocalDateTime.now());
         existing.setLastModifiedBy(user.getUsername());
 
         stockDep1Service.addStock(
@@ -230,10 +220,7 @@ public class LogisticIncomingService {
         data.put("reference", incoming.getReference());
         data.put("quantity", incoming.getQuantity());
         data.put("lotNumber", incoming.getLotNumber());
-        data.put("operatorMatricule", incoming.getOperatorMatricule());
         data.put("operationDate", incoming.getOperationDate());
-        data.put("notes", incoming.getNotes());
-        data.put("modified", Boolean.TRUE.equals(incoming.getModified()));
         data.put("lastModifiedAt", incoming.getLastModifiedAt());
         data.put("lastModifiedBy", incoming.getLastModifiedBy());
         return data;

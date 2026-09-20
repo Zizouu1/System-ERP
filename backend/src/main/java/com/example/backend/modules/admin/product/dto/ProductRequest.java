@@ -14,6 +14,5 @@ public class ProductRequest {
     private String ref;
     private String designation;
     private ProductTypeEnum productType;
-    private String description;
     private Boolean active;
 }

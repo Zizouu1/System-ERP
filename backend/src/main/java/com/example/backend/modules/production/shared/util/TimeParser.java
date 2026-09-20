@@ -33,7 +33,7 @@ public final class TimeParser {
                 try {
                     return LocalDateTime.parse(timeStr).toLocalTime();
                 } catch (DateTimeParseException e3) {
-                    throw new IllegalArgumentException("Invalid time format: " + timeStr);
+                    throw new IllegalArgumentException("Format d'heure invalide : " + timeStr);
                 }
             }
         }

@@ -30,7 +30,7 @@ public class QRCodeGenerator {
             MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
             return pngOutputStream.toByteArray();
         } catch (WriterException | IOException e) {
-            throw new RuntimeException("Error generating QR code", e);
+            throw new RuntimeException("Impossible de générer le QR code.", e);
         }
     }
 

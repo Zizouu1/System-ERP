@@ -32,16 +32,15 @@ public class Outgoing {
     @Column(nullable = false)
     private LocalDateTime operationDate;
 
-    @Column(length = 500)
-    private String notes;
-
     @JsonIgnore
     private String createdByUsername;
-
-    @Builder.Default
-    private Boolean modified = false;
 
     private LocalDateTime lastModifiedAt;
 
     private String lastModifiedBy;
+
+    @PreUpdate
+    void onUpdate() {
+        lastModifiedAt = LocalDateTime.now();
+    }
 }

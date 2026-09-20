@@ -15,8 +15,6 @@ public class IncomingMaterialDTO {
     private String reference;
     private Double quantity;
     private String lotNumber;
-    private String operatorMatricule;
-    private String notes;
     private LocalDateTime operationDate;
     private Boolean generateQr;
 }

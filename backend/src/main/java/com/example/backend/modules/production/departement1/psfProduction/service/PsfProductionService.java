@@ -13,7 +13,6 @@ import com.example.backend.modules.production.departement1.psfProduction.reposit
 import com.example.backend.modules.production.departement1.shared.entity.StockDep1;
 import com.example.backend.modules.production.departement1.shared.service.StockDep1Service;
 import com.example.backend.modules.production.productionstock.service.GlobalStockService;
-import com.example.backend.modules.production.productionstock.util.ProductionTimeCalculator;
 import com.example.backend.modules.production.productionstock.util.QRCodeGenerator;
 import com.example.backend.modules.production.shared.util.TimeParser;
 import jakarta.transaction.Transactional;
@@ -52,19 +51,30 @@ public class PsfProductionService {
     }
 
     @Transactional
+    @SuppressWarnings("null")
     public List<PsfQrLabelDTO> declareProduction(PsfProductionRequest request, User user) {
         validateProductReference(request.getReference());
 
         if (request.getQuantityPerBatch() <= 0) {
-            throw new IllegalArgumentException("Quantity per batch must be greater than zero.");
+            throw new IllegalArgumentException(messageForUser(
+                    user,
+                    "La quantité par lot doit être strictement positive."
+            ));
         }
         if (request.getQuantity() < 0) {
-            throw new IllegalArgumentException("Total produced quantity cannot be negative.");
+            throw new IllegalArgumentException(messageForUser(
+                    user,
+                    "La quantité totale produite ne peut pas être négative."
+            ));
         }
 
-        int batches = (int) (request.getQuantity() / request.getQuantityPerBatch());
+    double netQuantity = request.getQuantity() - request.getScrapQuantity();
+    int batches = (int) (request.getQuantity() / request.getQuantityPerBatch());
         if (batches <= 0) {
-            throw new RuntimeException("Total produced quantity must be greater than batch quantity.");
+            throw new RuntimeException(messageForUser(
+                    user,
+                    "La quantité totale produite doit être supérieure à la quantité par lot."
+            ));
         }
 
         LocalTime startTimeParsed = TimeParser.parseTime(request.getStartTime());
@@ -84,28 +94,22 @@ public class PsfProductionService {
                 .createdByUsername(user.getUsername())
                 .build();
 
-        if (startTimeParsed != null && endTimeParsed != null) {
-            ProductionTimeCalculator.ProductionMetrics metrics = ProductionTimeCalculator.calculate(
-                    startTimeParsed,
-                    endTimeParsed,
-                    request.getQuantity());
-            production.setRawTime(metrics.rawTime());
-            production.setEffectiveTime(metrics.effectiveTime());
-            production.setPerformance(metrics.performance());
-        }
+
 
         PsfProduction savedProduction = productionRepository.save(production);
         String stockProductionRef = "PSF-" + savedProduction.getId();
         savedProduction.setStockProductionRef(stockProductionRef);
         productionRepository.save(savedProduction);
 
-        double netQuantity = request.getQuantity() - request.getScrapQuantity();
-        if (netQuantity < 0) {
-            throw new IllegalArgumentException("Scrap quantity cannot exceed total produced quantity.");
+        if (request.getScrapQuantity() > request.getQuantity()) {
+            throw new IllegalArgumentException(messageForUser(
+                    user,
+                    "La quantité de rebut ne peut pas dépasser la quantité totale produite."
+            ));
         }
 
-        int fullBatches = (int) (netQuantity / request.getQuantityPerBatch());
-        double remainder = netQuantity % request.getQuantityPerBatch();
+    int fullBatches = (int) (netQuantity / request.getQuantityPerBatch());
+    double remainder = netQuantity % request.getQuantityPerBatch();
         List<PsfQrLabelDTO> qrCodes = new ArrayList<>();
 
         for (int i = 0; i < fullBatches; i++) {
@@ -127,11 +131,19 @@ public class PsfProductionService {
             qrCodes.add(buildQrLabel(request.getReference(), remainder, batchLot));
         }
 
-        globalStockProductService.declareProduction(
-                request.getReference(),
-                netQuantity,
-                stockProductionRef,
-                ProductTypeEnum.SEMI_FINI);
+    globalStockProductService.declareProduction(
+        request.getReference(),
+        request.getQuantity(),
+        stockProductionRef,
+        ProductTypeEnum.SEMI_FINI,
+        operationAuthorizationService.isAdmin(user));
+
+        if (request.getScrapQuantity() != 0) {
+            globalStockProductService.increaseQuantity(
+                    request.getReference(),
+                    -request.getScrapQuantity(),
+                    ProductTypeEnum.SEMI_FINI);
+        }
 
         return qrCodes;
     }
@@ -151,8 +163,14 @@ public class PsfProductionService {
         return stockDep1Service.getAllStocks();
     }
 
+    private String messageForUser(User user, String adminMessage) {
+        return operationAuthorizationService.isAdmin(user)
+                ? adminMessage
+                : "Opération impossible.";
+    }
+
     @Transactional
-    public PsfProductionUpdateResponse updateProduction(Long id, PsfProductionRequest request, User user) {
+    public PsfProductionUpdateResponse updateProduction(@NonNull Long id, PsfProductionRequest request, User user) {
         PsfProduction existing = productionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Production non trouvée"));
 
@@ -176,15 +194,39 @@ public class PsfProductionService {
         }
 
         Map<String, Object> oldSnapshot = snapshot(existing);
-        double oldNetQty = existing.getQuantity() - existing.getScrapQuantity();
         String stockRef = existing.getStockProductionRef() != null
                 ? existing.getStockProductionRef()
                 : "PSF-" + existing.getId();
-    stockDep1Service.deductStock(existing.getReference(), null, oldNetQty);
 
-        globalStockProductService.revertProduction(existing.getReference(), oldNetQty, stockRef);
+        boolean quantityChanged = Double.compare(existing.getQuantity(), request.getQuantity()) != 0;
+        boolean referenceChanged = !existing.getReference().equals(request.getReference());
+        boolean batchChanged = Double.compare(existing.getQuantityPerBatch(), request.getQuantityPerBatch()) != 0;
+        boolean scrapChanged = Double.compare(existing.getScrapQuantity(), request.getScrapQuantity()) != 0;
+        boolean shouldAdjustComponents = quantityChanged || referenceChanged;
+        boolean shouldAdjustStock = shouldAdjustComponents || batchChanged || scrapChanged;
 
-        double newNetQty = request.getQuantity() - request.getScrapQuantity();
+        if (shouldAdjustStock) {
+            double oldNetQuantity = existing.getQuantity() - existing.getScrapQuantity();
+            stockDep1Service.deductStock(existing.getReference(), null, oldNetQuantity);
+        }
+
+        if (shouldAdjustComponents) {
+            globalStockProductService.revertProduction(existing.getReference(), existing.getQuantity(), stockRef);
+            if (existing.getScrapQuantity() != 0) {
+                globalStockProductService.increaseQuantity(
+                        existing.getReference(),
+                        existing.getScrapQuantity(),
+                        ProductTypeEnum.SEMI_FINI);
+            }
+        } else if (scrapChanged) {
+            double scrapDelta = request.getScrapQuantity() - existing.getScrapQuantity();
+            if (scrapDelta != 0) {
+                globalStockProductService.increaseQuantity(
+                        existing.getReference(),
+                        -scrapDelta,
+                        ProductTypeEnum.SEMI_FINI);
+            }
+        }
 
         existing.setReference(request.getReference());
         existing.setQuantity(request.getQuantity());
@@ -198,44 +240,52 @@ public class PsfProductionService {
         existing.setStartTime(start);
         existing.setEndTime(end);
 
-        if (start != null && end != null) {
-            ProductionTimeCalculator.ProductionMetrics metrics = ProductionTimeCalculator.calculate(start, end, request.getQuantity());
-            existing.setRawTime(metrics.rawTime());
-            existing.setEffectiveTime(metrics.effectiveTime());
-            existing.setPerformance(metrics.performance());
-        }
 
-    String lotPrefix = "P-" + existing.getId() + ".";
-    int fullBatches = (int) (newNetQty / request.getQuantityPerBatch());
-        double remainder = newNetQty % request.getQuantityPerBatch();
-    List<PsfQrLabelDTO> qrLabels = new ArrayList<>();
+
+        String lotPrefix = "P-" + existing.getId() + ".";
+    double netQuantity = request.getQuantity() - request.getScrapQuantity();
+    int fullBatches = (int) (netQuantity / request.getQuantityPerBatch());
+    double remainder = netQuantity % request.getQuantityPerBatch();
+        List<PsfQrLabelDTO> qrLabels = new ArrayList<>();
         for (int i = 0; i < fullBatches; i++) {
-        String batchLot = lotPrefix + (i + 1);
-            stockDep1Service.addStock(
-                    request.getReference(),
-            batchLot,
-                    ProductTypeEnum.SEMI_FINI,
-        request.getQuantityPerBatch());
-        qrLabels.add(buildQrLabel(request.getReference(), request.getQuantityPerBatch(), batchLot));
+            String batchLot = lotPrefix + (i + 1);
+            if (shouldAdjustStock) {
+                stockDep1Service.addStock(
+                        request.getReference(),
+                        batchLot,
+                        ProductTypeEnum.SEMI_FINI,
+                        request.getQuantityPerBatch());
+            }
+            qrLabels.add(buildQrLabel(request.getReference(), request.getQuantityPerBatch(), batchLot));
         }
         if (remainder > 0) {
-        String batchLot = lotPrefix + (fullBatches + 1);
-            stockDep1Service.addStock(
-                    request.getReference(),
-            batchLot,
-                    ProductTypeEnum.SEMI_FINI,
-            remainder);
-        qrLabels.add(buildQrLabel(request.getReference(), remainder, batchLot));
+            String batchLot = lotPrefix + (fullBatches + 1);
+            if (shouldAdjustStock) {
+                stockDep1Service.addStock(
+                        request.getReference(),
+                        batchLot,
+                        ProductTypeEnum.SEMI_FINI,
+                        remainder);
+            }
+            qrLabels.add(buildQrLabel(request.getReference(), remainder, batchLot));
         }
 
-        globalStockProductService.declareProduction(
-                request.getReference(),
-                newNetQty,
-                stockRef,
-                ProductTypeEnum.SEMI_FINI);
+    if (shouldAdjustComponents) {
+            globalStockProductService.declareProduction(
+                    request.getReference(),
+                    request.getQuantity(),
+                    stockRef,
+                    ProductTypeEnum.SEMI_FINI,
+                    operationAuthorizationService.isAdmin(user));
+    }
 
-        existing.setModified(true);
-        existing.setLastModifiedAt(LocalDateTime.now());
+    if (shouldAdjustStock && request.getScrapQuantity() != 0) {
+        globalStockProductService.increaseQuantity(
+            request.getReference(),
+            -request.getScrapQuantity(),
+            ProductTypeEnum.SEMI_FINI);
+        }
+
         existing.setLastModifiedBy(user.getUsername());
 
         PsfProduction saved = productionRepository.save(existing);
@@ -257,13 +307,19 @@ public class PsfProductionService {
         PsfProduction existing = productionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Production introuvable"));
 
-        double oldNetQty = existing.getQuantity() - existing.getScrapQuantity();
-        String stockRef = existing.getStockProductionRef() != null
-                ? existing.getStockProductionRef()
-                : "PSF-" + existing.getId();
-    stockDep1Service.deductStock(existing.getReference(), null, oldNetQty);
+    double oldQty = existing.getQuantity() - existing.getScrapQuantity();
+    String stockRef = existing.getStockProductionRef() != null
+        ? existing.getStockProductionRef()
+        : "PSF-" + existing.getId();
+    stockDep1Service.deductStock(existing.getReference(), null, oldQty);
 
-        globalStockProductService.revertProduction(existing.getReference(), oldNetQty, stockRef);
+    globalStockProductService.revertProduction(existing.getReference(), existing.getQuantity(), stockRef);
+    if (existing.getScrapQuantity() != 0) {
+        globalStockProductService.increaseQuantity(
+                existing.getReference(),
+                existing.getScrapQuantity(),
+                ProductTypeEnum.SEMI_FINI);
+    }
         operationAuditService.recordDelete(OperationEntityTypes.PSF_PRODUCTION, existing.getId(), snapshot(existing), user);
         productionRepository.delete(existing);
     }
@@ -305,10 +361,6 @@ public class PsfProductionService {
         data.put("producedByCutMachine", production.isProducedByCutMachine());
         data.put("startTime", production.getStartTime());
         data.put("endTime", production.getEndTime());
-        data.put("rawTime", production.getRawTime());
-        data.put("effectiveTime", production.getEffectiveTime());
-        data.put("performance", production.getPerformance());
-        data.put("modified", Boolean.TRUE.equals(production.getModified()));
         data.put("lastModifiedAt", production.getLastModifiedAt());
         data.put("lastModifiedBy", production.getLastModifiedBy());
         return data;

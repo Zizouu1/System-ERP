@@ -9,16 +9,13 @@ import com.example.backend.modules.production.departement2.dto.PfProductionReque
 import com.example.backend.modules.production.departement2.entity.PfProduction;
 import com.example.backend.modules.production.departement2.repository.PfProductionRepository;
 import com.example.backend.modules.production.productionstock.service.GlobalStockService;
-import com.example.backend.modules.production.productionstock.util.ProductionTimeCalculator;
 import com.example.backend.modules.production.shared.util.TimeParser;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +39,7 @@ public class PfProductionService {
     }
 
     @Transactional
+    @SuppressWarnings("null")
     public PfProduction saveProduction(PfProductionRequest request, User user) {
         validateProductReference(request.getReference());
         if (request.getStartTime() == null || request.getEndTime() == null) {
@@ -53,35 +51,37 @@ public class PfProductionService {
 
         LocalTime startTimeParsed = TimeParser.parseTime(request.getStartTime());
         LocalTime endTimeParsed = TimeParser.parseTime(request.getEndTime());
-        ProductionTimeCalculator.ProductionMetrics metrics = ProductionTimeCalculator.calculate(
-                startTimeParsed,
-                endTimeParsed,
-                request.getQuantity().doubleValue());
 
         PfProduction production = PfProduction.builder()
                 .operatorMatricule(request.getOperatorMatricule())
                 .reference(request.getReference())
-                .quantity(request.getQuantity())
+        .quantity(request.getQuantity().doubleValue())
                 .scrapQuantity(request.getScrapQuantity())
                 .startTime(startTimeParsed)
                 .endTime(endTimeParsed)
-                .rawTime(metrics.rawTime())
-                .effectiveTime(metrics.effectiveTime())
-                .performance(metrics.performance())
                 .createdByUsername(user.getUsername())
                 .build();
 
-        PfProduction saved = pfProductionRepository.save(production);
-        int netQuantity = request.getQuantity() - request.getScrapQuantity();
-        if (netQuantity < 0) {
-            throw new IllegalArgumentException("La quantité de rebut ne peut pas dépasser la quantité totale.");
-        }
+    PfProduction saved = pfProductionRepository.save(production);
+        if (request.getScrapQuantity() > request.getQuantity()) {
+        throw new IllegalArgumentException("La quantité de rebut ne peut pas dépasser la quantité totale.");
+    }
 
-        globalStockProductService.declareProduction(
-                request.getReference(),
-                netQuantity,
-                productionRef(saved.getId()),
-                ProductTypeEnum.PRODUIT_FINI);
+        double scrapQuantity = request.getScrapQuantity();
+
+    globalStockProductService.declareProduction(
+        request.getReference(),
+        request.getQuantity(),
+        productionRef(saved.getId()),
+        ProductTypeEnum.PRODUIT_FINI,
+        operationAuthorizationService.isAdmin(user));
+
+        if (scrapQuantity != 0) {
+            globalStockProductService.increaseQuantity(
+                    request.getReference(),
+                    -scrapQuantity,
+                    ProductTypeEnum.PRODUIT_FINI);
+        }
 
         return saved;
     }
@@ -98,7 +98,7 @@ public class PfProductionService {
     }
 
     @Transactional
-    public PfProduction updateProduction(Long id, PfProductionRequest request, User user) {
+    public PfProduction updateProduction(@NonNull Long id, PfProductionRequest request, User user) {
         validateProductReference(request.getReference());
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
             throw new IllegalArgumentException("La quantité doit être supérieure à zéro.");
@@ -113,17 +113,32 @@ public class PfProductionService {
 
         Map<String, Object> oldSnapshot = snapshot(existing);
 
-        int oldNetQty = existing.getQuantity() - existing.getScrapQuantity();
-        globalStockProductService.revertProduction(existing.getReference(), oldNetQty, productionRef(existing.getId()));
-
-        int newNetQty = request.getQuantity() - request.getScrapQuantity();
-        if (newNetQty < 0) {
+        if (request.getScrapQuantity() > request.getQuantity()) {
             throw new IllegalArgumentException("La quantité de rebut ne peut pas dépasser la quantité totale.");
         }
 
+        boolean quantityChanged = existing.getQuantity() == null
+                || Double.compare(existing.getQuantity(), request.getQuantity()) != 0;
+        boolean referenceChanged = !existing.getReference().equals(request.getReference());
+        boolean shouldAdjustStock = quantityChanged || referenceChanged;
+
+    if (shouldAdjustStock) {
+        double oldQuantity = existing.getQuantity() != null ? existing.getQuantity() : 0.0;
+        globalStockProductService.revertProduction(
+            existing.getReference(),
+            oldQuantity,
+            productionRef(existing.getId()));
+        if (existing.getScrapQuantity() != 0) {
+            globalStockProductService.increaseQuantity(
+                    existing.getReference(),
+                    existing.getScrapQuantity(),
+                    ProductTypeEnum.PRODUIT_FINI);
+        }
+    }
+
         existing.setReference(request.getReference());
         existing.setOperatorMatricule(request.getOperatorMatricule());
-        existing.setQuantity(request.getQuantity());
+    existing.setQuantity(request.getQuantity().doubleValue());
         existing.setScrapQuantity(request.getScrapQuantity());
 
         if (request.getStartTime() != null && request.getEndTime() != null) {
@@ -131,24 +146,23 @@ public class PfProductionService {
             LocalTime end = TimeParser.parseTime(request.getEndTime());
             existing.setStartTime(start);
             existing.setEndTime(end);
-
-            ProductionTimeCalculator.ProductionMetrics metrics = ProductionTimeCalculator.calculate(
-                    start,
-                    end,
-                    request.getQuantity().doubleValue());
-            existing.setRawTime(metrics.rawTime());
-            existing.setEffectiveTime(metrics.effectiveTime());
-            existing.setPerformance(metrics.performance());
         }
 
+    if (shouldAdjustStock) {
         globalStockProductService.declareProduction(
-                request.getReference(),
-                newNetQty,
-                productionRef(existing.getId()),
-                ProductTypeEnum.PRODUIT_FINI);
+            request.getReference(),
+            request.getQuantity(),
+            productionRef(existing.getId()),
+            ProductTypeEnum.PRODUIT_FINI,
+            operationAuthorizationService.isAdmin(user));
+        if (request.getScrapQuantity() != 0) {
+            globalStockProductService.increaseQuantity(
+                    request.getReference(),
+                    -request.getScrapQuantity(),
+                    ProductTypeEnum.PRODUIT_FINI);
+        }
+    }
 
-        existing.setModified(true);
-        existing.setLastModifiedAt(LocalDateTime.now());
         existing.setLastModifiedBy(user.getUsername());
 
         PfProduction saved = pfProductionRepository.save(existing);
@@ -162,13 +176,19 @@ public class PfProductionService {
     }
 
     @Transactional
-    public void deleteProduction(Long id, User user) {
+    public void deleteProduction(@NonNull Long id, User user) {
         operationAuthorizationService.assertAdmin(user);
         PfProduction existing = pfProductionRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Production introuvable"));
 
-        int oldNetQty = existing.getQuantity() - existing.getScrapQuantity();
-        globalStockProductService.revertProduction(existing.getReference(), oldNetQty, productionRef(existing.getId()));
+    double oldQty = existing.getQuantity() != null ? existing.getQuantity() : 0.0;
+    globalStockProductService.revertProduction(existing.getReference(), oldQty, productionRef(existing.getId()));
+    if (existing.getScrapQuantity() != 0) {
+        globalStockProductService.increaseQuantity(
+                existing.getReference(),
+                existing.getScrapQuantity(),
+                ProductTypeEnum.PRODUIT_FINI);
+    }
         operationAuditService.recordDelete(OperationEntityTypes.PF_PRODUCTION, existing.getId(), snapshot(existing), user);
         pfProductionRepository.delete(existing);
     }
@@ -188,10 +208,9 @@ public class PfProductionService {
         data.put("scrapQuantity", production.getScrapQuantity());
         data.put("startTime", production.getStartTime());
         data.put("endTime", production.getEndTime());
-        data.put("rawTime", production.getRawTime());
-        data.put("effectiveTime", production.getEffectiveTime());
-        data.put("performance", production.getPerformance());
-        data.put("modified", Boolean.TRUE.equals(production.getModified()));
+    data.put("startDateTime", production.getStartDateTime());
+    data.put("endDateTime", production.getEndDateTime());
+        data.put("createdAt", production.getCreatedAt());
         data.put("lastModifiedAt", production.getLastModifiedAt());
         data.put("lastModifiedBy", production.getLastModifiedBy());
         return data;

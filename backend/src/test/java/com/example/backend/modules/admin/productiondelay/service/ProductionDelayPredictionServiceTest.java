@@ -38,8 +38,8 @@ class ProductionDelayPredictionServiceTest {
         server.expect(requestTo("http://localhost:8001/predict-delay"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().json(
-                        "{\"duration\":8.0,\"quantity_order\":300.0,\"machine_available\":2.0,"
-                                + "\"bom_depth\":3.0,\"total_operations\":4.0,\"total_bom_components\":16.0}",
+                        "{\"duration\":8,\"quantity_order\":300,\"machine_available\":2,"
+                                + "\"bom_depth\":3,\"total_operations\":4,\"total_bom_components\":16}",
                         true
                 ))
                 .andRespond(withSuccess(
@@ -49,7 +49,7 @@ class ProductionDelayPredictionServiceTest {
                 ));
 
         ProductionDelayPredictionRequest request = new ProductionDelayPredictionRequest(
-                8.0, 300.0, 2.0, 3.0, 4.0, 16.0
+                8, 300, 2, 3, 4, 16
         );
 
         ProductionDelayPredictionResponse response = service.predictDelay(request);
@@ -70,7 +70,7 @@ class ProductionDelayPredictionServiceTest {
                 ));
 
         ProductionDelayPredictionRequest request = new ProductionDelayPredictionRequest(
-                3.0, 120.0, 5.0, 2.0, 1.0, 8.0
+                3, 120, 5, 2, 1, 8
         );
 
         ProductionDelayPredictionResponse response = service.predictDelay(request);

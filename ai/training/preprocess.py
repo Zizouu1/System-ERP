@@ -97,7 +97,7 @@ def _validate_and_convert_numeric_column(df: pd.DataFrame, column: str) -> pd.Se
             df.loc[invalid_mask, column].astype(str).head(5).tolist()
         )
         raise ValueError(
-            f"Column '{column}' contains non-numeric values: {invalid_samples}"
+            f"La colonne '{column}' contient des valeurs non numériques : {invalid_samples}"
         )
 
     return converted
@@ -123,8 +123,8 @@ def _convert_target_column(series: pd.Series) -> pd.Series:
         if not invalid_values.empty:
             sample_values = invalid_values.astype(str).head(5).tolist()
             raise ValueError(
-                f"Target column '{TARGET_COLUMN}' must contain only 0/1 values. "
-                f"Invalid samples: {sample_values}"
+                f"La colonne cible '{TARGET_COLUMN}' doit contenir uniquement 0 ou 1. "
+                f"Exemples invalides : {sample_values}"
             )
         return numeric_target.astype(int)
 
@@ -134,7 +134,7 @@ def _convert_target_column(series: pd.Series) -> pd.Series:
     if converted.isna().any():
         invalid_samples = series[converted.isna()].astype(str).head(5).tolist()
         raise ValueError(
-            f"Target column '{TARGET_COLUMN}' contains unsupported values: "
+            f"La colonne cible '{TARGET_COLUMN}' contient des valeurs non prises en charge : "
             f"{invalid_samples}"
         )
     return converted.astype(int)
@@ -152,7 +152,7 @@ def _map_target_value(raw_value: object) -> int | None:
 def load_dataset(dataset_path: Path) -> pd.DataFrame:
     if not dataset_path.exists():
         raise FileNotFoundError(
-            "Dataset not found. Please add training data before running training."
+            "Jeu de données introuvable. Ajoutez des données avant l'entraînement."
         )
 
     return pd.read_csv(dataset_path, encoding="utf-8-sig")
@@ -166,7 +166,7 @@ def validate_dataset(df: pd.DataFrame) -> pd.DataFrame:
     ]
     if missing_columns:
         missing_text = ", ".join(sorted(missing_columns))
-        raise ValueError(f"Dataset is missing required columns: {missing_text}")
+        raise ValueError(f"Le jeu de données ne contient pas les colonnes requises : {missing_text}")
 
     for feature in RAW_FEATURE_COLUMNS:
         canonical_df[feature] = _validate_and_convert_numeric_column(
@@ -182,7 +182,7 @@ def validate_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     canonical_df[TARGET_COLUMN] = _convert_target_column(canonical_df[TARGET_COLUMN])
     if canonical_df[TARGET_COLUMN].isna().any():
-        raise ValueError(f"Target column '{TARGET_COLUMN}' contains missing values.")
+        raise ValueError(f"La colonne cible '{TARGET_COLUMN}' contient des valeurs manquantes.")
 
     return canonical_df
 

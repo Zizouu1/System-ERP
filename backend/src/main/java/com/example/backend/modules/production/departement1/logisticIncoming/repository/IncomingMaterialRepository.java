@@ -12,6 +12,4 @@ public interface IncomingMaterialRepository extends JpaRepository<IncomingMateri
     List<IncomingMaterial> findAllByOrderByIdDesc();
 
     List<IncomingMaterial> findByCreatedByUsernameOrderByIdDesc(String createdByUsername);
-
-    List<IncomingMaterial> findByOperatorMatriculeOrderByIdDesc(String operatorMatricule);
 }
