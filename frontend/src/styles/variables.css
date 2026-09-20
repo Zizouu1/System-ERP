@@ -1,0 +1,50 @@
+/* src/styles/variables.css */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
+
+:root {
+  /* Colors */
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-2: #f9fafb;
+  --text: #111827;
+  --muted: #6b7280;
+  --text-muted: #6b7280;
+  --border: #e5e7eb;
+
+  --primary: #4c1d95;
+  --primary-600: #5b21b6;
+  --primary-50: #ddd6fe;
+  --primary-100: #c4b5fd;
+  --primary-200: #a78bfa;
+  --primary-accent: #8b5cf6;
+  --primary-rgb: 76, 29, 149;
+
+  --danger: #ef4444;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --sidebar-bg: #070b16;
+
+  /* KPI Purple Theme */
+  --kpi-bg: #3b0764;
+  --kpi-bg-hover: #4c1d95;
+  --kpi-text: #ffffff;
+  --kpi-border: rgba(167, 139, 250, 0.34);
+  --kpi-shadow: 0 10px 24px rgba(59, 7, 100, 0.22);
+
+  /* Table states */
+  --table-row-hover: rgba(var(--primary-rgb), 0.04);
+
+  /* Shadows */
+  --shadow-sm:
+    0 1px 2px rgba(17, 24, 39, 0.05), 0 8px 16px rgba(17, 24, 39, 0.05);
+  --shadow: 0 12px 28px rgba(17, 24, 39, 0.08);
+  --shadow-lg: 0 18px 40px rgba(17, 24, 39, 0.12);
+
+  /* Radii */
+  --radius: 12px;
+  --radius-lg: 16px;
+
+  /* Typography */
+  --font:
+    "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+}
